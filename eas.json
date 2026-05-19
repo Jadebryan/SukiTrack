@@ -9,6 +9,7 @@
     },
     "preview": {
       "distribution": "internal",
+      "environment": "preview",  // 👈 add this
       "android": {
         "buildType": "apk"
       }
