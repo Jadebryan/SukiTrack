@@ -52,7 +52,10 @@
           }
         }
       ],
-      "expo-secure-store"
+      "expo-secure-store",
+      "expo-font",
+      "expo-sharing",
+      "expo-web-browser"
     ],
     "experiments": {},
     "extra": {
