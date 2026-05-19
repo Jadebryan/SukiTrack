@@ -128,11 +128,6 @@ export default function RootLayout() {
     return null;
   }
 
-  // Call this on app startup
-  useEffect(() => {
-    fetch(`${process.env.EXPO_PUBLIC_API_URL}/health`).catch(() => {});
-  }, []);
-
   return (
     <AppThemeProvider>
       <LocaleProvider>
