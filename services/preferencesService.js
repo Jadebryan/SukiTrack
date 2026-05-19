@@ -194,3 +194,60 @@ export async function removeCategoryStickerOverride(ownerId, label) {
     JSON.stringify(root)
   );
 }
+
+const RECENT_MAX = 5;
+
+async function readRecentCustomerMap() {
+  const raw = await AsyncStorage.getItem(STORAGE_KEYS.RECENT_CUSTOMER_IDS);
+  if (!raw || !String(raw).trim()) return {};
+  try {
+    const obj = JSON.parse(raw);
+    return obj && typeof obj === 'object' ? obj : {};
+  } catch {
+    return {};
+  }
+}
+
+/** @param {string} ownerId @returns {Promise<string[]>} ids most recent first */
+export async function getRecentCustomerIds(ownerId) {
+  if (!ownerId) return [];
+  const obj = await readRecentCustomerMap();
+  const list = obj[String(ownerId)];
+  if (!Array.isArray(list)) return [];
+  return list.map((x) => String(x).trim()).filter(Boolean).slice(0, RECENT_MAX);
+}
+
+/** @param {string} ownerId @param {string} customerId */
+export async function pushRecentCustomerId(ownerId, customerId) {
+  const id = String(ownerId || '').trim();
+  const cid = String(customerId || '').trim();
+  if (!id || !cid) return;
+  const obj = await readRecentCustomerMap();
+  const prev = Array.isArray(obj[id]) ? obj[id].map((x) => String(x).trim()).filter(Boolean) : [];
+  const next = [cid, ...prev.filter((x) => x !== cid)].slice(0, RECENT_MAX);
+  obj[id] = next;
+  await AsyncStorage.setItem(STORAGE_KEYS.RECENT_CUSTOMER_IDS, JSON.stringify(obj));
+}
+
+export async function setPendingOpenAddCustomer() {
+  await AsyncStorage.setItem(STORAGE_KEYS.PENDING_HOME_ADD_CUSTOMER, '1');
+}
+
+/** @returns {Promise<boolean>} */
+export async function getAndClearPendingOpenAddCustomer() {
+  const v = await AsyncStorage.getItem(STORAGE_KEYS.PENDING_HOME_ADD_CUSTOMER);
+  if (v === '1') {
+    await AsyncStorage.removeItem(STORAGE_KEYS.PENDING_HOME_ADD_CUSTOMER);
+    return true;
+  }
+  return false;
+}
+
+export async function getNavTipsDismissed() {
+  const v = await AsyncStorage.getItem(STORAGE_KEYS.NAV_TIPS_DISMISSED);
+  return v === '1';
+}
+
+export async function setNavTipsDismissed() {
+  await AsyncStorage.setItem(STORAGE_KEYS.NAV_TIPS_DISMISSED, '1');
+}

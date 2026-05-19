@@ -1,5 +1,5 @@
 import { useFocusEffect, useRouter } from 'expo-router';
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   FlatList,
   Pressable,
@@ -24,6 +24,7 @@ import {
   useTheme,
 } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { getTabBarOuterHeight } from '@/constants/tabBar';
 import { AddCustomerModal } from '@/components/AddCustomerModal';
 import { CustomerCard } from '@/components/CustomerCard';
 import { EmptyState } from '@/components/EmptyState';
@@ -38,9 +39,13 @@ import { useKeyboardHeight } from '@/hooks/useKeyboardHeight';
 import { useOfflineStatus } from '@/hooks/useOfflineStatus';
 import { useAllPages } from '@/hooks/useTransactions';
 import {
+  getAndClearPendingOpenAddCustomer,
   getBackupReminderDismissedAt,
   getLastExportAt,
+  getNavTipsDismissed,
+  getRecentCustomerIds,
   setBackupReminderDismissedNow,
+  setNavTipsDismissed,
 } from '@/services/preferencesService';
 import { formatPeso } from '@/utils/currency';
 import { formatDateTime } from '@/utils/date';
@@ -84,8 +89,40 @@ export function HomeScreen() {
   const [offlineBanner, setOfflineBanner] = useState(true);
   const [addCustomerOpen, setAddCustomerOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
+  const [quickOpen, setQuickOpen] = useState(false);
+  const [recentIds, setRecentIds] = useState([]);
+  const [navTipsVisible, setNavTipsVisible] = useState(false);
   const isOffline = useOfflineStatus();
   const keyboardPad = useKeyboardHeight(true);
+  const tabBarOuter = getTabBarOuterHeight(insets.bottom);
+
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      (async () => {
+        const pending = await getAndClearPendingOpenAddCustomer();
+        if (!cancelled && pending) setAddCustomerOpen(true);
+        if (user?.ownerId) {
+          const ids = await getRecentCustomerIds(user.ownerId);
+          if (!cancelled) setRecentIds(ids);
+        }
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }, [user?.ownerId])
+  );
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      if (await getNavTipsDismissed()) return;
+      if (alive) setNavTipsVisible(true);
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
@@ -143,7 +180,12 @@ export function HomeScreen() {
     const nq = normalize(q);
     let rows = customers;
     if (nq) {
-      rows = rows.filter((c) => normalize(c.name).includes(nq));
+      rows = rows.filter((c) => {
+        const name = normalize(c.name);
+        const phone = normalize(c.phone);
+        const addr = normalize(c.address);
+        return name.includes(nq) || phone.includes(nq) || addr.includes(nq);
+      });
     }
     if (filterKey === 'unpaid') {
       rows = rows.filter((c) => (Number(c.balance) || 0) > 0);
@@ -161,6 +203,13 @@ export function HomeScreen() {
   const outstandingIds = useMemo(() => {
     return new Set(outstanding.map((c) => c.id));
   }, [outstanding]);
+
+  const recentCustomers = useMemo(() => {
+    const byId = new Map(customers.map((c) => [c.id, c]));
+    return recentIds.map((id) => byId.get(id)).filter(Boolean);
+  }, [recentIds, customers]);
+
+  const lastRecentCustomer = recentCustomers[0] || null;
 
   const allCustomers = useMemo(() => {
     if (filterKey !== 'all') return filtered;
@@ -344,6 +393,7 @@ export function HomeScreen() {
                   iconColor={theme.colors.onSurfaceVariant}
                   containerColor={theme.colors.surfaceVariant}
                   style={styles.iconBtn}
+                  accessibilityLabel={t('home_notifBellA11y')}
                 />
                 <IconButton
                   icon="plus"
@@ -352,6 +402,7 @@ export function HomeScreen() {
                   iconColor="#2d8a4e"
                   containerColor={theme.colors.surfaceVariant}
                   style={styles.iconBtn}
+                  accessibilityLabel={t('home_addCustomerTopA11y')}
                 />
               </View>
             </View>
@@ -490,6 +541,65 @@ export function HomeScreen() {
                 {t('home_chipRecent')}
               </Chip>
             </View>
+            {navTipsVisible ? (
+              <View
+                style={[
+                  styles.tipsCard,
+                  {
+                    backgroundColor: theme.colors.primaryContainer || '#e8f5ed',
+                    borderColor: theme.colors.outlineVariant || theme.colors.outline,
+                  },
+                ]}
+              >
+                <Text style={[styles.tipsTitle, { color: theme.colors.onPrimaryContainer || '#1a2e1f' }]}>
+                  {t('home_navTipsTitle')}
+                </Text>
+                <Text style={[styles.tipsLine, { color: theme.colors.onSurfaceVariant }]}>
+                  {t('home_navTips1')}
+                </Text>
+                <Text style={[styles.tipsLine, { color: theme.colors.onSurfaceVariant }]}>
+                  {t('home_navTips2')}
+                </Text>
+                <Text style={[styles.tipsLine, { color: theme.colors.onSurfaceVariant }]}>
+                  {t('home_navTips3')}
+                </Text>
+                <Button
+                  mode="contained-tonal"
+                  compact
+                  onPress={async () => {
+                    await setNavTipsDismissed();
+                    setNavTipsVisible(false);
+                  }}
+                  style={{ alignSelf: 'flex-start', marginTop: 10 }}
+                >
+                  {t('home_navTipsDismiss')}
+                </Button>
+              </View>
+            ) : null}
+            {recentCustomers.length > 0 ? (
+              <View style={styles.recentBlock}>
+                <Text style={[styles.recentHeading, { color: theme.colors.onSurfaceVariant }]}>
+                  {t('home_recentHeading')}
+                </Text>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.recentChips}
+                >
+                  {recentCustomers.map((c) => (
+                    <Chip
+                      key={c.id}
+                      compact
+                      mode="outlined"
+                      style={styles.recentChip}
+                      onPress={() => router.push(`/customer/${c.id}`)}
+                    >
+                      {c.name}
+                    </Chip>
+                  ))}
+                </ScrollView>
+              </View>
+            ) : null}
             {error ? (
               <View style={styles.errBox}>
                 <Text variant="bodyLarge" style={styles.err}>
@@ -566,22 +676,91 @@ export function HomeScreen() {
           );
         }}
         contentContainerStyle={{
-          paddingBottom: 120 + keyboardPad,
+          paddingBottom: tabBarOuter + 72 + keyboardPad,
           backgroundColor: theme.colors.background,
         }}
       />
 
       <FAB
-        icon="plus"
-        style={styles.fab}
-        onPress={() => setAddCustomerOpen(true)}
+        icon="menu"
+        style={[styles.fab, { bottom: tabBarOuter + 14 }]}
+        onPress={() => setQuickOpen(true)}
         variant="primary"
+        accessibilityLabel={t('home_fabQuickA11y')}
       />
 
       <AddCustomerModal
         visible={addCustomerOpen}
         onDismiss={() => setAddCustomerOpen(false)}
       />
+
+      <Portal>
+        <Dialog
+          visible={quickOpen}
+          onDismiss={() => setQuickOpen(false)}
+          style={[
+            styles.quickDialog,
+            {
+              backgroundColor: theme.colors.surface,
+              borderColor: theme.colors.outlineVariant || theme.colors.outline,
+              borderWidth: 1,
+            },
+          ]}
+        >
+          <Dialog.Title style={{ fontFamily: font.extraBold }}>{t('home_quickTitle')}</Dialog.Title>
+          <Dialog.Content>
+            <Button
+              mode="text"
+              icon="account-plus-outline"
+              onPress={() => {
+                setQuickOpen(false);
+                setAddCustomerOpen(true);
+              }}
+              style={styles.quickBtn}
+            >
+              {t('home_quickNewCustomer')}
+            </Button>
+            <Button
+              mode="text"
+              icon="package-variant"
+              onPress={() => {
+                setQuickOpen(false);
+                router.push('/inventory');
+              }}
+              style={styles.quickBtn}
+            >
+              {t('home_quickInventory')}
+            </Button>
+            <Button
+              mode="text"
+              icon="chart-bar"
+              onPress={() => {
+                setQuickOpen(false);
+                router.push('/reports');
+              }}
+              style={styles.quickBtn}
+            >
+              {t('home_quickReports')}
+            </Button>
+            {lastRecentCustomer ? (
+              <Button
+                mode="text"
+                icon="account-arrow-right-outline"
+                onPress={() => {
+                  setQuickOpen(false);
+                  router.push(`/customer/${lastRecentCustomer.id}`);
+                }}
+                style={styles.quickBtn}
+              >
+                {t('home_quickLastCustomer', { name: lastRecentCustomer.name })}
+              </Button>
+            ) : null}
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setQuickOpen(false)}>{t('home_quickClose')}</Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
 
       <Portal>
         <Dialog
@@ -882,7 +1061,27 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
 
-  fab: { position: 'absolute', right: 18, bottom: 18 },
+  fab: { position: 'absolute', right: 18 },
+  quickDialog: { borderRadius: 16, alignSelf: 'center', width: '90%', maxWidth: 400 },
+  quickBtn: { justifyContent: 'flex-start' },
+  tipsCard: {
+    marginTop: 12,
+    padding: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+  },
+  tipsTitle: { fontFamily: font.extraBold, fontSize: 15, marginBottom: 8 },
+  tipsLine: { fontSize: 13, lineHeight: 19, marginBottom: 4 },
+  recentBlock: { marginTop: 12 },
+  recentHeading: {
+    fontFamily: font.semiBold,
+    fontSize: 11,
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+    marginBottom: 8,
+  },
+  recentChips: { flexDirection: 'row', gap: 8, paddingRight: 8 },
+  recentChip: { marginRight: 0 },
   centerPad: { textAlign: 'center', padding: 24 },
   errBox: { marginHorizontal: 16, marginBottom: 8 },
   err: { color: '#C62828', marginBottom: 8 },

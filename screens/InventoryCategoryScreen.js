@@ -11,12 +11,13 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Button, Card, FAB, Text } from 'react-native-paper';
+import { Button, Card, FAB, Text, useTheme } from 'react-native-paper';
 import { AppConfirmDialog } from '@/components/AppConfirmDialog';
 import { EmptyState } from '@/components/EmptyState';
 import { InventoryProductEditorModal } from '@/components/InventoryProductEditorModal';
 import { InventoryProductListSkeleton } from '@/components/Skeleton';
 import { VerifyPinModal } from '@/components/VerifyPinModal';
+import { getTabBarOuterHeight } from '@/constants/tabBar';
 import { font } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLocale } from '@/contexts/LocaleContext';
@@ -28,8 +29,6 @@ import { updateInventoryItem } from '@/services/inventoryService';
 import { formatPeso } from '@/utils/currency';
 import { itemMatchesCategorySlug, slugToCategory } from '@/utils/categoryRoute';
 
-const TAB_BAR_CLEARANCE = 56;
-
 function hasPrice(it) {
   return it.unitPrice != null && Number.isFinite(Number(it.unitPrice));
 }
@@ -40,6 +39,7 @@ export function InventoryCategoryScreen() {
   const { t } = useLocale();
   const { user } = useAuth();
   const { showToast } = useToast();
+  const theme = useTheme();
   const insets = useSafeAreaInsets();
   const { inventory, refresh, loading, error } = useShopData();
   const [refreshing, setRefreshing] = useState(false);
@@ -154,7 +154,27 @@ export function InventoryCategoryScreen() {
     const showBulk =
       Boolean(user?.ownerId) && Boolean(categoryStored.trim()) && filtered.length > 0;
     navigation.setOptions({
-      title: headerTitle,
+      headerTitle: () => (
+        <View style={{ alignItems: 'center', justifyContent: 'center', maxWidth: 260 }}>
+          <Text
+            style={{
+              fontFamily: font.extraBold,
+              fontSize: 17,
+              color: theme.colors.onSurface,
+            }}
+            numberOfLines={1}
+          >
+            {headerTitle}
+          </Text>
+          <Text
+            variant="labelSmall"
+            style={{ color: theme.colors.onSurfaceVariant, marginTop: 2 }}
+            numberOfLines={1}
+          >
+            {t('tab_inventory')} · {headerTitle}
+          </Text>
+        </View>
+      ),
       headerRight: showBulk
         ? () => (
             <Button
@@ -179,9 +199,11 @@ export function InventoryCategoryScreen() {
     bulkUncatBusy,
     t,
     openBulkUncatFlow,
+    theme.colors.onSurface,
+    theme.colors.onSurfaceVariant,
   ]);
 
-  const fabBottom = insets.bottom + TAB_BAR_CLEARANCE;
+  const fabBottom = getTabBarOuterHeight(insets.bottom) + 12;
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -259,9 +281,17 @@ export function InventoryCategoryScreen() {
                   {error?.message || t('common_error')}
                 </Text>
               ) : null}
-              <Text variant="bodySmall" style={styles.hint}>
-                {t('inv_catScreenHint')}
+            <Text variant="bodySmall" style={styles.hint}>
+              {t('inv_catScreenHint')}
+            </Text>
+            {Boolean(categoryStored.trim()) && filtered.length > 0 ? (
+              <Text
+                variant="bodySmall"
+                style={[styles.bulkHint, { color: theme.colors.onSurfaceVariant }]}
+              >
+                {t('inv_catBulkHeaderHint')}
               </Text>
+            ) : null}
             </View>
           }
           contentContainerStyle={[
@@ -389,6 +419,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     lineHeight: 20,
   },
+  bulkHint: { opacity: 0.85, lineHeight: 18, marginBottom: 4 },
   errBanner: { color: '#C62828', marginBottom: 8 },
   content: { flexGrow: 1 },
   centerPad: { textAlign: 'center', padding: 24 },

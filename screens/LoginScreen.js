@@ -2,24 +2,26 @@ import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Dimensions,
   Pressable,
   ScrollView,
   StyleSheet,
   Text as RNText,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppConfirmDialog } from '@/components/AppConfirmDialog';
+import { APP_PIN_LENGTH } from '@/constants/appPin';
 import { font } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLocale } from '@/contexts/LocaleContext';
 import { useSensitiveScreenCapture } from '@/hooks/useSensitiveScreenCapture';
 import { useKeyboardHeight } from '@/hooks/useKeyboardHeight';
 import * as pinService from '@/services/pinService';
+import { getAuthPinNumpadMetrics } from '@/utils/authPinNumpadLayout';
 import { authStackBottomPads } from '@/utils/authScreenLayout';
 
 /** Design tokens (from SukiTrack login artifact) */
@@ -38,7 +40,6 @@ const C = {
   clearFg: '#c0392b',
 };
 
-const PIN_SLOTS = 6;
 const PIN_VERIFY_DEBOUNCE_MS = 420;
 const DIAL_SUB = {
   2: 'ABC',
@@ -56,7 +57,11 @@ export function LoginScreen() {
   useSensitiveScreenCapture(true);
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { width: winW } = Dimensions.get('window');
+  const { width: winW, height: winH } = useWindowDimensions();
+  const pinLayout = useMemo(
+    () => getAuthPinNumpadMetrics(winH, winW),
+    [winH, winW]
+  );
   const { t } = useLocale();
   const { user, unlockSession, refreshPinState, signOut, sessionLoading } =
     useAuth();
@@ -98,11 +103,11 @@ export function LoginScreen() {
   useEffect(() => {
     if (busy) return;
     const len = pin.length;
-    if (len < 4 || len > 6) return;
+    if (len !== APP_PIN_LENGTH) return;
 
     const id = setTimeout(() => {
       const p = pinRef.current;
-      if (p.length < 4 || p.length > 6) return;
+      if (p.length !== APP_PIN_LENGTH) return;
 
       (async () => {
         if (!user?.token || !user?.ownerId) return;
@@ -153,7 +158,7 @@ export function LoginScreen() {
   const appendDigit = (d) => {
     if (busy) return;
     setError('');
-    if (pin.length >= PIN_SLOTS) return;
+    if (pin.length >= APP_PIN_LENGTH) return;
     setPin((p) => p + d);
   };
 
@@ -163,15 +168,15 @@ export function LoginScreen() {
     setPin((p) => p.slice(0, -1));
   };
 
-  const keyGap = 10;
-  const cardPad = 28;
-  const keySize = Math.min(
-    80,
-    (winW - cardPad * 2 - keyGap * 2) / 3
-  );
+  const keyGap = pinLayout.keyGap;
+  const keySize = pinLayout.keySize;
 
   const pinDisplay =
-    pin.length === 0 ? '••••••' : showPin ? pin : '•'.repeat(pin.length);
+    pin.length === 0
+      ? '•'.repeat(APP_PIN_LENGTH)
+      : showPin
+        ? pin
+        : '•'.repeat(pin.length);
 
   const { scrollContentPaddingBottom, cardPaddingBottom } = authStackBottomPads(
     insets.bottom,
@@ -179,7 +184,12 @@ export function LoginScreen() {
   );
 
   const keypadRow = (keys, rowId, { isLast } = {}) => (
-    <View style={[styles.keyRow, { gap: keyGap }, isLast && { marginBottom: 0 }]}>
+    <View
+      style={[
+        styles.keyRow,
+        { gap: keyGap, marginBottom: isLast ? 0 : pinLayout.keyRowMb },
+      ]}
+    >
       {keys.map((cell, idx) => {
         if (cell === null) {
           return (
@@ -241,7 +251,7 @@ export function LoginScreen() {
                 {DIAL_SUB[digit]}
               </RNText>
             ) : (
-              <View style={{ height: 14 }} />
+              <View style={{ height: pinLayout.keySubSpacer }} />
             )}
           </Pressable>
         );
@@ -249,7 +259,7 @@ export function LoginScreen() {
     </View>
   );
 
-  const heroPadBottom = 44;
+  const heroPadBottom = pinLayout.heroPadBottom;
 
   return (
     <View style={styles.root}>
@@ -274,7 +284,7 @@ export function LoginScreen() {
             styles.hero,
             {
               paddingBottom: heroPadBottom,
-              paddingTop: Math.max(insets.top, 16) + 20,
+              paddingTop: Math.max(insets.top, 16) + pinLayout.heroTopBump,
             },
           ]}
         >
@@ -294,23 +304,41 @@ export function LoginScreen() {
               style={[styles.heroBlob, { backgroundColor: 'rgba(255,255,255,0.05)' }]}
             />
 
-            <View style={styles.logoIcon}>
-              <MaterialCommunityIcons name="account" size={32} color={C.white} />
+            <View
+              style={[
+                styles.logoIcon,
+                {
+                  width: pinLayout.loginLogo,
+                  height: pinLayout.loginLogo,
+                  borderRadius: Math.round(pinLayout.loginLogo * 0.31),
+                  marginBottom: pinLayout.loginLogoMb,
+                },
+              ]}
+            >
+              <MaterialCommunityIcons
+                name="account"
+                size={Math.round(pinLayout.loginLogo * 0.5)}
+                color={C.white}
+              />
             </View>
-            <RNText style={styles.brand}>
+            <RNText style={[styles.brand, { fontSize: pinLayout.loginBrand }]}>
               Suki
               <RNText
                 style={{
                   color: C.greenLight,
                   fontFamily: font.extraBold,
-                  fontSize: 32,
+                  fontSize: pinLayout.loginBrand,
                   letterSpacing: -0.5,
                 }}
               >
                 Track
               </RNText>
             </RNText>
-            <RNText style={styles.tagline}>{t('login_tagline')}</RNText>
+            <RNText
+              style={[styles.tagline, { marginTop: pinLayout.loginTaglineMt }]}
+            >
+              {t('login_tagline')}
+            </RNText>
           </View>
 
           {/* Card */}
@@ -323,10 +351,16 @@ export function LoginScreen() {
               },
             ]}
           >
-            <RNText style={styles.greeting}>{t('login_welcomeBack')}</RNText>
+            <RNText
+              style={[styles.greeting, { marginBottom: pinLayout.loginGreetingMb }]}
+            >
+              {t('login_welcomeBack')}
+            </RNText>
 
             {user?.email ? (
-              <View style={styles.accountInfo}>
+              <View
+                style={[styles.accountInfo, { marginBottom: pinLayout.loginAccountMb }]}
+              >
                 <LinearGradient
                   colors={[C.greenMid, C.greenBright]}
                   start={{ x: 0, y: 0 }}
@@ -358,7 +392,12 @@ export function LoginScreen() {
                 </Pressable>
               </View>
             ) : (
-              <View style={styles.accountRowSwitchOnly}>
+              <View
+                style={[
+                  styles.accountRowSwitchOnly,
+                  { marginBottom: pinLayout.loginAccountMb },
+                ]}
+              >
                 <Pressable
                   onPress={onChangeAccount}
                   disabled={busy}
@@ -377,8 +416,8 @@ export function LoginScreen() {
               </View>
             )}
 
-            <View style={styles.pinDots}>
-              {Array.from({ length: PIN_SLOTS }).map((_, i) => {
+            <View style={[styles.pinDots, { marginBottom: pinLayout.loginPinDotsMb }]}>
+              {Array.from({ length: APP_PIN_LENGTH }).map((_, i) => {
                 const filled = i < pin.length;
                 return (
                   <View
@@ -436,7 +475,12 @@ export function LoginScreen() {
               </Pressable>
             </View>
 
-            <View style={styles.pinFieldFooter}>
+            <View
+              style={[
+                styles.pinFieldFooter,
+                { marginBottom: pinLayout.loginPinFooterMb },
+              ]}
+            >
               <Pressable
                 onPress={() => router.push('/forgot-pin')}
                 hitSlop={8}

@@ -20,4 +20,10 @@ export const STORAGE_KEYS = {
   INVENTORY_EXTRA_CATEGORIES: 'utang_ph_inv_extra_categories',
   /** JSON `{ [ownerId]: { [normalizedLabel]: { icon, bg, rotate } } }` — smart / network-assisted sticker picks. */
   INVENTORY_CATEGORY_STICKER_OVERRIDES: 'utang_ph_inv_cat_sticker_overrides',
+  /** JSON `{ [ownerId]: string[] }` — last opened customer ids (max 5), most recent first. */
+  RECENT_CUSTOMER_IDS: 'utang_ph_recent_customer_ids',
+  /** '1' when user long-pressed tab to open Add customer on Home. */
+  PENDING_HOME_ADD_CUSTOMER: 'utang_ph_pending_home_add_customer',
+  /** '1' after user dismissed the home navigation tips card. */
+  NAV_TIPS_DISMISSED: 'utang_ph_nav_tips_dismissed',
 };

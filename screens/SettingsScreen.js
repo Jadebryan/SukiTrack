@@ -285,6 +285,12 @@ export function SettingsScreen() {
           <View style={{ width: 32, height: 32 }} />
         </View>
 
+        <View style={styles.section}>
+          <Text style={[styles.sectionLabel, { marginBottom: 6 }]}>
+            {t('settings_accountTitle')}
+          </Text>
+        </View>
+
         <Pressable
           onPress={() => setAccountOpen(true)}
           style={({ pressed }) => [styles.profileCard, pressed && { opacity: 0.92 }]}
@@ -685,7 +691,7 @@ const styles = StyleSheet.create({
     letterSpacing: -0.3,
   },
   profileCard: {
-    marginTop: 14,
+    marginTop: 6,
     marginHorizontal: 16,
     backgroundColor: '#2d8a4e',
     borderRadius: 16,

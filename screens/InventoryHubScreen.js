@@ -534,64 +534,76 @@ export function InventoryHubScreen() {
     <>
     <ScrollView
       ref={scrollRef}
+      stickyHeaderIndices={[1]}
       style={[styles.flex, { backgroundColor: theme.colors.background }]}
       contentContainerStyle={[styles.pad, { paddingTop: Math.max(insets.top, 10) }]}
       refreshControl={
         <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
       }
     >
-      {error ? (
-        <Text variant="bodySmall" style={styles.err}>
-          {error?.message || t('common_error')}
-        </Text>
-      ) : null}
+      <View>
+        {error ? (
+          <Text variant="bodySmall" style={styles.err}>
+            {error?.message || t('common_error')}
+          </Text>
+        ) : null}
+
+        <View
+          style={[
+            styles.topbar,
+            {
+              backgroundColor: theme.colors.surface,
+              borderBottomColor: theme.colors.outlineVariant || theme.colors.outline,
+            },
+          ]}
+        >
+          <View style={{ width: 32, height: 32 }} />
+          <Text style={[styles.pageTitle, { color: theme.colors.onSurface }]}>
+            {t('tab_inventory')}
+          </Text>
+          <IconButton
+            icon="plus"
+            size={18}
+            onPress={() => router.push('/inventory/_')}
+            iconColor="#fff"
+            containerColor="#2d8a4e"
+            style={styles.plusBtn}
+            accessibilityLabel={t('inv_hubPlusUncatA11y')}
+          />
+        </View>
+      </View>
 
       <View
         style={[
-          styles.topbar,
-          {
-            backgroundColor: theme.colors.surface,
-            borderBottomColor: theme.colors.outlineVariant || theme.colors.outline,
-          },
+          styles.stickySearchHost,
+          { backgroundColor: theme.colors.background },
         ]}
       >
-        <View style={{ width: 32, height: 32 }} />
-        <Text style={[styles.pageTitle, { color: theme.colors.onSurface }]}>
-          {t('tab_inventory')}
-        </Text>
-        <IconButton
-          icon="plus"
-          size={18}
-          onPress={() => router.push('/inventory/_')}
-          iconColor="#fff"
-          containerColor="#2d8a4e"
-          style={styles.plusBtn}
-        />
+        <View style={styles.searchWrap}>
+          <Searchbar
+            placeholder={t('inv_searchPlaceholder')}
+            value={q}
+            onChangeText={setQ}
+            style={[
+              styles.search,
+              {
+                backgroundColor: theme.colors.surface,
+                borderColor: theme.colors.outlineVariant || theme.colors.outline,
+              },
+            ]}
+            inputStyle={[styles.searchInput, { color: theme.colors.onSurface }]}
+            elevation={0}
+          />
+          <Text
+            variant="bodySmall"
+            style={[styles.searchHint, { color: theme.colors.onSurfaceVariant }]}
+          >
+            {t('inv_hubSearchCategoryHint')}
+          </Text>
+        </View>
       </View>
 
-      <View style={styles.searchWrap}>
-        <Searchbar
-          placeholder={t('inv_searchPlaceholder')}
-          value={q}
-          onChangeText={setQ}
-          style={[
-            styles.search,
-            {
-              backgroundColor: theme.colors.surface,
-              borderColor: theme.colors.outlineVariant || theme.colors.outline,
-            },
-          ]}
-          inputStyle={[styles.searchInput, { color: theme.colors.onSurface }]}
-          elevation={0}
-        />
-        <Text
-          variant="bodySmall"
-          style={[styles.searchHint, { color: theme.colors.onSurfaceVariant }]}
-        >
-          {t('inv_hubSearchCategoryHint')}
-        </Text>
-      </View>
-
+      <View>
       <View
         style={[
           styles.statsStrip,
@@ -851,6 +863,7 @@ export function InventoryHubScreen() {
         </View>
       )}
       </View>
+      </View>
     </ScrollView>
     <Portal>
       <Dialog
@@ -993,6 +1006,11 @@ const styles = StyleSheet.create({
     height: 32,
   },
   searchWrap: { paddingTop: 14 },
+  /** Sticky slot: no border/shadow — avoids a “double frame” around Searchbar + hint. */
+  stickySearchHost: {
+    zIndex: 4,
+    paddingBottom: 2,
+  },
   searchHint: { fontSize: 11, marginTop: 6, lineHeight: 15, fontFamily: font.medium },
   presetsToggle: {
     flexDirection: 'row',

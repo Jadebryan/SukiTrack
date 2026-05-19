@@ -5,16 +5,17 @@ import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  Dimensions,
   KeyboardAvoidingView,
   Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text as RNText,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { APP_PIN_LENGTH } from '@/constants/appPin';
 import {
   OnboardingHeader,
   OnboardingStepPill,
@@ -27,6 +28,7 @@ import { useLocale } from '@/contexts/LocaleContext';
 import { useSensitiveScreenCapture } from '@/hooks/useSensitiveScreenCapture';
 import { useKeyboardHeight } from '@/hooks/useKeyboardHeight';
 import * as pinService from '@/services/pinService';
+import { getAuthPinNumpadMetrics } from '@/utils/authPinNumpadLayout';
 import { authStackBottomPads } from '@/utils/authScreenLayout';
 
 const C = {
@@ -45,8 +47,7 @@ const C = {
   err: '#e74c3c',
 };
 
-const PIN_SLOTS = 6;
-const HERO_PAD_BOTTOM = 44;
+const PIN_SLOTS = APP_PIN_LENGTH;
 
 const DIAL_SUB = {
   2: 'ABC',
@@ -60,7 +61,7 @@ const DIAL_SUB = {
 };
 
 function digitsOnly(s) {
-  return String(s || '').replace(/\D/g, '').slice(0, 6);
+  return String(s || '').replace(/\D/g, '').slice(0, APP_PIN_LENGTH);
 }
 
 export function SetupPinScreen() {
@@ -68,7 +69,11 @@ export function SetupPinScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const insets = useSafeAreaInsets();
-  const { width: winW } = Dimensions.get('window');
+  const { width: winW, height: winH } = useWindowDimensions();
+  const pinLayout = useMemo(
+    () => getAuthPinNumpadMetrics(winH, winW),
+    [winH, winW]
+  );
   const { t } = useLocale();
   const { unlockSession, refreshPinState, user, sessionLoading } = useAuth();
   const keyboardPad = useKeyboardHeight(true);
@@ -93,7 +98,7 @@ export function SetupPinScreen() {
   }, [sessionLoading, user?.token, user?.ownerId, router]);
 
   useEffect(() => {
-    if (pin.length < 4 && focusField === 'confirm') {
+    if (pin.length < APP_PIN_LENGTH && focusField === 'confirm') {
       setFocusField('pin');
     }
   }, [pin.length, focusField]);
@@ -102,12 +107,8 @@ export function SetupPinScreen() {
     setConfirm((c) => (c.length > pin.length ? c.slice(0, pin.length) : c));
   }, [pin]);
 
-  const keyGap = 10;
-  const cardPad = 28;
-  const keySize = Math.min(
-    80,
-    (winW - cardPad * 2 - keyGap * 2) / 3
-  );
+  const keyGap = pinLayout.keyGap;
+  const keySize = pinLayout.keySize;
 
   const pinLen = pin.length;
   const confirmLen = confirm.length;
@@ -116,10 +117,12 @@ export function SetupPinScreen() {
     if (pinLen === 0) {
       return { kind: 'info', text: t('setup_hintEnter') };
     }
-    if (pinLen < 4) {
+    if (pinLen < APP_PIN_LENGTH) {
       return {
         kind: 'err',
-        text: t('setup_hintMore', { count: String(4 - pinLen) }),
+        text: t('setup_hintMore', {
+          count: String(APP_PIN_LENGTH - pinLen),
+        }),
       };
     }
     return { kind: 'ok', text: t('setup_hintLenOk') };
@@ -129,30 +132,41 @@ export function SetupPinScreen() {
     if (confirmLen === 0) {
       return { kind: 'info', text: t('setup_hintReenter') };
     }
-    if (pinLen >= 4 && pinLen <= 6 && confirm === pin) {
+    if (
+      pinLen === APP_PIN_LENGTH &&
+      confirmLen === APP_PIN_LENGTH &&
+      confirm === pin
+    ) {
       return { kind: 'ok', text: t('setup_hintMatch') };
     }
-    if (pinLen >= 4 && confirmLen >= pinLen && confirm !== pin) {
+    if (
+      pinLen === APP_PIN_LENGTH &&
+      confirmLen >= APP_PIN_LENGTH &&
+      confirm !== pin
+    ) {
       return { kind: 'err', text: t('setup_errMismatch') };
     }
     return { kind: 'info', text: t('setup_hintTyping') };
   }, [confirm, confirmLen, pin, pinLen, t]);
 
   const confirmFieldStyle = useMemo(() => {
-    if (pinLen < 4) return 'normal';
+    if (pinLen < APP_PIN_LENGTH) return 'normal';
     if (confirmLen > 0 && confirmLen >= pinLen && confirm !== pin) {
       return 'error';
     }
-    if (pinLen >= 4 && confirm === pin && confirmLen === pinLen) {
+    if (
+      pinLen === APP_PIN_LENGTH &&
+      confirm === pin &&
+      confirmLen === APP_PIN_LENGTH
+    ) {
       return 'success';
     }
     return 'normal';
   }, [confirm, confirmLen, pin, pinLen]);
 
   const canSubmit =
-    pinLen >= 4 &&
-    pinLen <= 6 &&
-    confirmLen === pinLen &&
+    pinLen === APP_PIN_LENGTH &&
+    confirmLen === APP_PIN_LENGTH &&
     confirm === pin;
 
   /** Same major step for enter-PIN and confirm-PIN; substeps are not separate onboarding steps. */
@@ -166,13 +180,13 @@ export function SetupPinScreen() {
     setError('');
     const digit = String(d);
     if (focusField === 'pin') {
-      if (pin.length >= 6) return;
+      if (pin.length >= APP_PIN_LENGTH) return;
       const next = digitsOnly(pin + digit);
       setPin(next);
-      if (next.length === 6) setFocusField('confirm');
+      if (next.length === APP_PIN_LENGTH) setFocusField('confirm');
       return;
     }
-    if (pin.length < 4) {
+    if (pin.length < APP_PIN_LENGTH) {
       setFocusField('pin');
       return;
     }
@@ -203,7 +217,7 @@ export function SetupPinScreen() {
 
   const submit = async () => {
     setError('');
-    if (pin.length < 4 || pin.length > 6) {
+    if (pin.length !== APP_PIN_LENGTH) {
       setError(t('setup_errLength'));
       return;
     }
@@ -226,12 +240,11 @@ export function SetupPinScreen() {
 
   const pinDisplay =
     pin.length === 0
-      ? '••••••'
+      ? '•'.repeat(APP_PIN_LENGTH)
       : showPin
         ? pin
         : '•'.repeat(pin.length);
-  const confirmSlots =
-    pin.length >= 4 ? Math.min(Math.max(4, pin.length), PIN_SLOTS) : PIN_SLOTS;
+  const confirmSlots = APP_PIN_LENGTH;
   const confirmDisplay =
     confirm.length === 0
       ? '•'.repeat(confirmSlots)
@@ -240,7 +253,12 @@ export function SetupPinScreen() {
         : '•'.repeat(confirm.length);
 
   const keypadRow = (keys, rowId, { isLast } = {}) => (
-    <View style={[styles.keyRow, { gap: keyGap }, isLast && { marginBottom: 0 }]}>
+    <View
+      style={[
+        styles.keyRow,
+        { gap: keyGap, marginBottom: isLast ? 0 : pinLayout.keyRowMb },
+      ]}
+    >
       {keys.map((cell, idx) => {
         if (cell === null) {
           return (
@@ -340,7 +358,7 @@ export function SetupPinScreen() {
                 {DIAL_SUB[digit]}
               </RNText>
             ) : (
-              <View style={{ height: 14 }} />
+              <View style={{ height: pinLayout.keySubSpacer }} />
             )}
           </Pressable>
         );
@@ -389,7 +407,7 @@ export function SetupPinScreen() {
             style={[
               styles.hero,
               {
-                paddingBottom: HERO_PAD_BOTTOM,
+                paddingBottom: pinLayout.heroPadBottom,
                 paddingTop: 8,
               },
             ]}
@@ -417,7 +435,16 @@ export function SetupPinScreen() {
                 t={t}
               />
             ) : null}
-            <RNText style={styles.heroTitle}>
+            <RNText
+              style={[
+                styles.heroTitle,
+                {
+                  fontSize: pinLayout.setupHeroTitleSize,
+                  lineHeight: pinLayout.setupHeroTitleLh,
+                  marginBottom: pinLayout.setupHeroTitleMb,
+                },
+              ]}
+            >
               {isResetFlow ? t('setupReset_heroTitle') : t('setup_heroTitle')}
             </RNText>
             <RNText style={styles.heroSub}>
@@ -425,8 +452,25 @@ export function SetupPinScreen() {
             </RNText>
           </View>
 
-          <View style={[styles.card, { marginTop: -22, paddingBottom: cardPadBottom }]}>
-            <View style={styles.tipBox}>
+          <View
+            style={[
+              styles.card,
+              {
+                marginTop: -22,
+                paddingBottom: cardPadBottom,
+                paddingTop: pinLayout.setupCardPadTop,
+              },
+            ]}
+          >
+            <View
+              style={[
+                styles.tipBox,
+                {
+                  marginBottom: pinLayout.setupTipMb,
+                  paddingVertical: pinLayout.setupTipPv,
+                },
+              ]}
+            >
               <MaterialCommunityIcons
                 name="information-outline"
                 size={18}
@@ -526,19 +570,19 @@ export function SetupPinScreen() {
 
             <Pressable
               onPress={() => {
-                if (pin.length >= 4) setFocusField('confirm');
+                if (pin.length >= APP_PIN_LENGTH) setFocusField('confirm');
               }}
               style={({ pressed }) => [
-                { marginTop: 18, opacity: pressed ? 0.92 : 1 },
-                pin.length < 4 && { opacity: 0.55 },
+                { marginTop: pinLayout.setupBetweenFieldsMt, opacity: pressed ? 0.92 : 1 },
+                pin.length < APP_PIN_LENGTH && { opacity: 0.55 },
               ]}
-              disabled={pin.length < 4}
+              disabled={pin.length < APP_PIN_LENGTH}
             >
               <View style={styles.fieldLabelRow}>
                 <RNText
                   style={[
                     styles.fieldLabel,
-                    pin.length >= 4 &&
+                    pin.length >= APP_PIN_LENGTH &&
                       focusField === 'confirm' &&
                       styles.fieldLabelActive,
                   ]}
@@ -572,10 +616,10 @@ export function SetupPinScreen() {
                   confirmFieldStyle === 'success' && styles.fieldWrapOk,
                   confirmFieldStyle === 'normal' &&
                     focusField === 'confirm' &&
-                    pin.length >= 4 &&
+                    pin.length >= APP_PIN_LENGTH &&
                     styles.fieldWrapFocus,
                   confirmFieldStyle === 'normal' &&
-                    !(focusField === 'confirm' && pin.length >= 4) &&
+                    !(focusField === 'confirm' && pin.length >= APP_PIN_LENGTH) &&
                     styles.fieldWrapIdle,
                 ]}
               >
@@ -608,13 +652,23 @@ export function SetupPinScreen() {
                 </Pressable>
               </View>
               <RNText style={[styles.fieldHint, hintStyle(confirmHint.kind)]}>
-                {pin.length < 4 ? t('setup_finishPinFirst') : confirmHint.text}
+                {pin.length < APP_PIN_LENGTH
+                  ? t('setup_finishPinFirst')
+                  : confirmHint.text}
               </RNText>
             </Pressable>
 
             {error ? <RNText style={styles.errBanner}>{error}</RNText> : null}
 
-            <View style={styles.numpad}>
+            <View
+              style={[
+                styles.numpad,
+                {
+                  marginTop: pinLayout.setupNumpadMt,
+                  marginBottom: pinLayout.setupNumpadMb,
+                },
+              ]}
+            >
               {keypadRow([1, 2, 3], 'r1')}
               {keypadRow([4, 5, 6], 'r2')}
               {keypadRow([7, 8, 9], 'r3')}
@@ -634,7 +688,10 @@ export function SetupPinScreen() {
                 colors={[C.greenDark, C.greenBright]}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
-                style={styles.ctaGrad}
+                style={[
+                  styles.ctaGrad,
+                  { paddingVertical: pinLayout.setupCtaPv },
+                ]}
               >
                 {busy ? (
                   <ActivityIndicator color={C.white} />

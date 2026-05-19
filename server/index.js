@@ -39,6 +39,16 @@ const userSchema = new mongoose.Schema(
     /** SHA-256 hex of opaque refresh token; rotated on login and refresh. */
     refreshTokenHash: { type: String, default: null, sparse: true, index: true },
     refreshTokenExpiresAt: { type: Date, default: null },
+    /** Multiple devices: each entry is one signed-in device (max enforced in app code). */
+    refreshSessions: {
+      type: [
+        {
+          tokenHash: { type: String, required: true },
+          expiresAt: { type: Date, required: true },
+        },
+      ],
+      default: [],
+    },
   },
   { timestamps: true }
 );
@@ -308,13 +318,80 @@ function hashRefreshToken(plain) {
     .digest('hex');
 }
 
-async function issueSessionTokens(user) {
+const MAX_REFRESH_DEVICES = 10;
+
+function pruneExpiredSessions(sessions) {
+  const now = Date.now();
+  if (!Array.isArray(sessions)) return [];
+  return sessions.filter((s) => s?.expiresAt && new Date(s.expiresAt).getTime() > now);
+}
+
+/**
+ * @param {import('mongoose').Document} user
+ * @param {{ replaceAll?: boolean }} [opts] replaceAll=true revokes every other device (password / PIN reset).
+ */
+async function issueSessionTokens(user, opts = {}) {
+  const replaceAll = Boolean(opts.replaceAll);
   const refreshPlain = randomBytes(48).toString('base64url');
   const refreshHash = hashRefreshToken(refreshPlain);
   const exp = new Date(Date.now() + refreshTokenLifetimeMs());
-  user.refreshTokenHash = refreshHash;
-  user.refreshTokenExpiresAt = exp;
+
+  let sessions = replaceAll
+    ? []
+    : pruneExpiredSessions([...(user.refreshSessions || [])]);
+
+  sessions.push({ tokenHash: refreshHash, expiresAt: exp });
+  sessions.sort((a, b) => new Date(a.expiresAt) - new Date(b.expiresAt));
+  while (sessions.length > MAX_REFRESH_DEVICES) {
+    sessions.shift();
+  }
+
+  user.refreshSessions = sessions;
+  user.refreshTokenHash = null;
+  user.refreshTokenExpiresAt = null;
   await user.save();
+  return {
+    token: signAccessToken(user),
+    refreshToken: refreshPlain,
+    ownerId: user.ownerId,
+    email: user.email,
+  };
+}
+
+async function rotateRefreshToken(user, oldPlain) {
+  const oldHash = hashRefreshToken(oldPlain);
+  const now = new Date();
+  const sessions = pruneExpiredSessions([...(user.refreshSessions || [])]);
+
+  const idx = sessions.findIndex(
+    (s) => s.tokenHash === oldHash && new Date(s.expiresAt) > now
+  );
+  const legacyOk =
+    user.refreshTokenHash === oldHash &&
+    user.refreshTokenExpiresAt &&
+    new Date(user.refreshTokenExpiresAt) > now;
+
+  if (idx < 0 && !legacyOk) {
+    const err = new Error('INVALID_REFRESH');
+    err.code = 'INVALID_REFRESH';
+    throw err;
+  }
+
+  const refreshPlain = randomBytes(48).toString('base64url');
+  const refreshHash = hashRefreshToken(refreshPlain);
+  const exp = new Date(Date.now() + refreshTokenLifetimeMs());
+
+  if (idx >= 0) {
+    sessions[idx] = { tokenHash: refreshHash, expiresAt: exp };
+  } else {
+    sessions.push({ tokenHash: refreshHash, expiresAt: exp });
+  }
+
+  user.refreshSessions = sessions;
+  user.refreshTokenHash = null;
+  user.refreshTokenExpiresAt = null;
+  await user.save();
+
   return {
     token: signAccessToken(user),
     refreshToken: refreshPlain,
@@ -831,7 +908,7 @@ app.post('/api/v1/auth/forgot-pin/verify', forgotPinVerifyLimiter, async (req, r
     user.pinResetCodeHash = null;
     user.pinResetExpiresAt = null;
     await user.save();
-    const out = await issueSessionTokens(user);
+    const out = await issueSessionTokens(user, { replaceAll: true });
     res.json(out);
   } catch (e) {
     console.error(e);
@@ -846,15 +923,29 @@ app.post('/api/v1/auth/refresh', refreshLimiter, async (req, res) => {
       return res.status(401).json({ error: 'Invalid session' });
     }
     const hash = hashRefreshToken(raw);
+    const now = new Date();
     const user = await User.findOne({
-      refreshTokenHash: hash,
-      refreshTokenExpiresAt: { $gt: new Date() },
+      $or: [
+        {
+          refreshSessions: {
+            $elemMatch: { tokenHash: hash, expiresAt: { $gt: now } },
+          },
+        },
+        { refreshTokenHash: hash, refreshTokenExpiresAt: { $gt: now } },
+      ],
     });
     if (!user) {
       return res.status(401).json({ error: 'Invalid session' });
     }
-    const out = await issueSessionTokens(user);
-    res.json(out);
+    try {
+      const out = await rotateRefreshToken(user, raw);
+      res.json(out);
+    } catch (e) {
+      if (e?.code === 'INVALID_REFRESH') {
+        return res.status(401).json({ error: 'Invalid session' });
+      }
+      throw e;
+    }
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: 'Server error' });
@@ -865,6 +956,7 @@ app.post('/api/v1/auth/logout', requireAuth, async (req, res) => {
   try {
     const user = await User.findOne({ ownerId: req.ownerId });
     if (user) {
+      user.refreshSessions = [];
       user.refreshTokenHash = null;
       user.refreshTokenExpiresAt = null;
       await user.save();
@@ -904,7 +996,7 @@ app.post(
     }
     user.passwordHash = await bcrypt.hash(String(newPassword), 10);
     await user.save();
-    const out = await issueSessionTokens(user);
+    const out = await issueSessionTokens(user, { replaceAll: true });
     auditFromReq(req, 'auth.change_password', {});
     res.json({ ok: true, ...out });
   } catch (e) {

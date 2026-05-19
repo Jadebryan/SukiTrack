@@ -3,6 +3,7 @@ import * as ScreenCapture from 'expo-screen-capture';
 import React, { useEffect, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { Button, Text, TextInput, useTheme } from 'react-native-paper';
+import { APP_PIN_LENGTH } from '@/constants/appPin';
 import { KeyboardAwareOverlayModal } from '@/components/KeyboardAwareOverlayModal';
 import { font } from '@/constants/theme';
 import { useLocale } from '@/contexts/LocaleContext';
@@ -34,7 +35,7 @@ export function VerifyPinModal({
   const [pin, setPin] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
-  const pinOk = useMemo(() => pin.length >= 4 && pin.length <= 6, [pin]);
+  const pinOk = useMemo(() => pin.length === APP_PIN_LENGTH, [pin]);
 
   useEffect(() => {
     if (!visible) return;
@@ -125,7 +126,9 @@ export function VerifyPinModal({
             mode="outlined"
             label={t('login_pinLabel')}
             value={pin}
-            onChangeText={(v) => setPin(String(v || '').replace(/\D+/g, '').slice(0, 6))}
+            onChangeText={(v) =>
+              setPin(String(v || '').replace(/\D+/g, '').slice(0, APP_PIN_LENGTH))
+            }
             keyboardType="number-pad"
             secureTextEntry
             style={styles.input}

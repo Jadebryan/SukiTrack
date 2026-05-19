@@ -25,7 +25,10 @@
         "backgroundColor": "#f4f1e8"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "web": {
       "bundler": "metro",
@@ -51,6 +54,12 @@
       ],
       "expo-secure-store"
     ],
-    "experiments": {}
+    "experiments": {},
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "2037367f-0c7d-4aae-ac1f-016b0daa430d"
+      }
+    }
   }
 }

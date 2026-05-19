@@ -1,5 +1,5 @@
-import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
-import React, { useLayoutEffect, useMemo, useState } from 'react';
+import { useFocusEffect, useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
+import React, { useCallback, useLayoutEffect, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, View, Image } from 'react-native';
 import {
   Appbar,
@@ -31,6 +31,7 @@ import { clearCustomerRecords } from '@/services/customersService';
 import { isOnline } from '@/services/networkStatus';
 import * as pinService from '@/services/pinService';
 import { toastSavedOnDeviceAware } from '@/services/offlineUi';
+import { pushRecentCustomerId } from '@/services/preferencesService';
 import {
   addPageItem,
   addPagePayment,
@@ -161,15 +162,19 @@ function UtangPageItemsPaymentsTotals({
             </Text>
             <IconButton
               icon="pencil-outline"
-              size={18}
+              size={22}
               style={styles.rowIconBtn}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              accessibilityLabel={t('cd_a11yEditLine')}
               onPress={() => onEditItem?.(it)}
             />
             <IconButton
               icon="trash-can-outline"
-              size={18}
+              size={22}
               style={styles.rowIconBtn}
               iconColor="#ef4444"
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              accessibilityLabel={t('cd_a11yDeleteLine')}
               onPress={() => onDeleteItem?.(it)}
             />
           </View>
@@ -193,15 +198,19 @@ function UtangPageItemsPaymentsTotals({
           </Text>
           <IconButton
             icon="pencil-outline"
-            size={18}
+            size={22}
             style={styles.rowIconBtn}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            accessibilityLabel={t('cd_a11yEditLine')}
             onPress={() => onEditPayment?.(p)}
           />
           <IconButton
             icon="trash-can-outline"
-            size={18}
+            size={22}
             style={styles.rowIconBtn}
             iconColor="#ef4444"
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            accessibilityLabel={t('cd_a11yDeleteLine')}
             onPress={() => onDeletePayment?.(p)}
           />
         </View>
@@ -323,6 +332,14 @@ export function CustomerDetailScreen() {
             new Date(a.paidAt || a.updatedAt || 0).getTime()
         ),
     [pages]
+  );
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!user?.ownerId || !customerId || !customer) return undefined;
+      void pushRecentCustomerId(user.ownerId, customerId);
+      return undefined;
+    }, [user?.ownerId, customerId, customer])
   );
 
   useLayoutEffect(() => {
@@ -573,9 +590,10 @@ export function CustomerDetailScreen() {
                 </Text>
                 <IconButton
                   icon="printer-outline"
-                  size={22}
+                  size={24}
                   onPress={() => onPrintPage(openPage)}
                   accessibilityLabel={t('cd_printPageA11y')}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                 />
               </View>
               <Text variant="bodySmall" style={styles.muted}>
@@ -624,9 +642,10 @@ export function CustomerDetailScreen() {
                       </View>
                       <IconButton
                         icon="printer-outline"
-                        size={22}
+                        size={24}
                         onPress={() => onPrintPage(p)}
                         accessibilityLabel={t('cd_printReceiptA11y')}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                       />
                     </View>
                     <Text variant="bodySmall" style={styles.muted}>
