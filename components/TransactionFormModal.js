@@ -39,14 +39,22 @@ export function TransactionFormModal({
   const [type, setType] = useState(initialType);
   const [amount, setAmount] = useState('');
   const [note, setNote] = useState('');
+  const [entries, setEntries] = useState([]);
 
   useEffect(() => {
     if (visible) {
       setType(initialType);
       setAmount('');
       setNote('');
+      setEntries([]);
     }
   }, [visible, initialType]);
+
+  useEffect(() => {
+    if (type !== 'utang') {
+      setEntries([]);
+    }
+  }, [type]);
 
   const parsedAmount = useMemo(() => parseAmountInput(amount), [amount]);
   const amountOk = Number.isFinite(parsedAmount) && parsedAmount > 0;
@@ -83,7 +91,7 @@ export function TransactionFormModal({
     }
   };
 
-  const handleSave = async () => {
+  const handleAddMore = () => {
     if (!amountOk) {
       showToast({
         type: 'error',
@@ -91,18 +99,52 @@ export function TransactionFormModal({
       });
       return;
     }
-    if (
-      type === 'payment' &&
-      dueNum != null &&
-      parsedAmount > dueNum + 0.005
-    ) {
+    setEntries((prev) => [
+      ...prev,
+      {
+        amount: parsedAmount,
+        description: (note && String(note).trim()) || t('common_item'),
+      },
+    ]);
+    setAmount('');
+    setNote('');
+  };
+
+  const handleSave = async () => {
+    if (type === 'payment') {
+      if (!amountOk) {
+        showToast({
+          type: 'error',
+          message: `${t('tm_amountErrTitle')}: ${t('tm_amountErrMsg')}`,
+        });
+        return;
+      }
+      if (dueNum != null && parsedAmount > dueNum + 0.005) {
+        showToast({
+          type: 'error',
+          message: t('tm_payExceedsDue', { amount: formatPeso(dueNum) }),
+        });
+        return;
+      }
+      await onSubmit({ type, amount: parsedAmount, note });
+      return;
+    }
+
+    const queued = entries.slice();
+    if (amountOk) {
+      queued.push({
+        amount: parsedAmount,
+        description: (note && String(note).trim()) || t('common_item'),
+      });
+    }
+    if (!queued.length) {
       showToast({
         type: 'error',
-        message: t('tm_payExceedsDue', { amount: formatPeso(dueNum) }),
+        message: `${t('tm_amountErrTitle')}: ${t('tm_amountErrMsg')}`,
       });
       return;
     }
-    await onSubmit({ type, amount: parsedAmount, note });
+    await onSubmit({ type, items: queued });
   };
 
   const fillFullDue = () => {
@@ -242,17 +284,50 @@ export function TransactionFormModal({
             />
           ) : null}
 
+          {type === 'utang' && entries.length > 0 ? (
+            <View style={styles.previewWrap}>
+              <Text variant="labelLarge" style={styles.previewLabel}>
+                {entries.length > 1
+                  ? `${entries.length} items ready to save`
+                  : '1 item ready to save'}
+              </Text>
+              {entries.map((entry, index) => (
+                <View key={index} style={styles.previewRow}>
+                  <Text>{entry.description}</Text>
+                  <Text style={styles.previewAmount}>{formatPeso(entry.amount)}</Text>
+                </View>
+              ))}
+            </View>
+          ) : null}
+
           <View style={styles.actions}>
             <Button mode="text" onPress={onDismiss} disabled={submitting}>
               {t('common_cancel')}
             </Button>
+            {type === 'utang' ? (
+              <Button
+                mode="outlined"
+                onPress={handleAddMore}
+                loading={submitting}
+                disabled={submitting || !amountOk}
+              >
+                Add more
+              </Button>
+            ) : null}
             <Button
               mode="contained"
               onPress={handleSave}
               loading={submitting}
-              disabled={submitting || !amountOk}
+              disabled={
+                submitting ||
+                (type === 'payment'
+                  ? !amountOk
+                  : !(amountOk || entries.length > 0))
+              }
             >
-              {t('common_save')}
+              {type === 'utang' && entries.length > 0
+                ? 'Save all'
+                : t('common_save')}
             </Button>
           </View>
         </ScrollView>
@@ -282,6 +357,21 @@ const styles = StyleSheet.create({
   partialHint: { marginTop: 6, marginBottom: 10, opacity: 0.88, lineHeight: 20 },
   dueChip: { alignSelf: 'flex-start' },
   input: { marginBottom: 12 },
+  previewWrap: {
+    marginBottom: 12,
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: 'rgba(0,0,0,0.03)',
+  },
+  previewLabel: { marginBottom: 8, opacity: 0.8 },
+  previewRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.06)',
+  },
+  previewAmount: { fontFamily: font.bold },
   actions: {
     flexDirection: 'row',
     justifyContent: 'flex-end',

@@ -7,6 +7,7 @@ import {
   ScrollView,
   StyleSheet,
   View,
+  Image,
 } from 'react-native';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -16,6 +17,7 @@ import { AppConfirmDialog } from '@/components/AppConfirmDialog';
 import { VerifyPinModal } from '@/components/VerifyPinModal';
 import { EmptyState } from '@/components/EmptyState';
 import { InventoryHubGridSkeleton } from '@/components/Skeleton';
+import { InventoryProductEditorModal } from '@/components/InventoryProductEditorModal';
 import { INVENTORY_CATEGORY_PRESET_KEYS } from '@/constants/inventoryCategories';
 import {
   getCategoryStickerVisual,
@@ -42,6 +44,7 @@ import {
   setCategoryStickerOverride,
 } from '@/services/preferencesService';
 import { categoryToSlug } from '@/utils/categoryRoute';
+import { formatPeso } from '@/utils/currency';
 
 const GAP = 12;
 const PAD = 16;
@@ -50,6 +53,10 @@ function normalize(s) {
   return String(s || '')
     .toLowerCase()
     .trim();
+}
+
+function hasPrice(it) {
+  return it.unitPrice != null && Number.isFinite(Number(it.unitPrice));
 }
 
 function hexToRgba(hex, a) {
@@ -106,6 +113,28 @@ export function InventoryHubScreen() {
 
   const rows = useMemo(() => inventory || [], [inventory]);
   const nq = useMemo(() => normalize(q), [q]);
+
+  const itemMatchesHubQuery = useCallback(
+    (it) => {
+      if (!nq) return true;
+      return (
+        normalize(it.name).includes(nq) ||
+        normalize(String(it.category || '')).includes(nq)
+      );
+    },
+    [nq]
+  );
+
+  const matchedProducts = useMemo(() => {
+    if (!nq) return [];
+    return rows
+      .filter((it) => itemMatchesHubQuery(it))
+      .sort((a, b) =>
+        String(a.name || '').localeCompare(String(b.name || ''), 'en', {
+          sensitivity: 'base',
+        })
+      );
+  }, [rows, itemMatchesHubQuery, nq]);
 
   const productCountByCategoryNorm = useMemo(() => {
     const m = new Map();
@@ -201,8 +230,11 @@ export function InventoryHubScreen() {
     const list = [];
 
     const uncCount = rows.filter((it) => {
-      if (nq && !normalize(it.name).includes(nq)) return false;
-      return !String(it.category || '').trim();
+      const isUncat = !String(it.category || '').trim();
+      if (!isUncat) return false;
+      if (!nq) return true;
+      if (normalize(t('inv_filterUncat')).includes(nq)) return true;
+      return normalize(it.name).includes(nq);
     }).length;
     list.push({
       key: '_',
@@ -211,10 +243,14 @@ export function InventoryHubScreen() {
       count: uncCount,
     });
 
+    const presetLabels = new Set(
+      INVENTORY_CATEGORY_PRESET_KEYS.map((k) => normalize(t(k)))
+    );
+
     for (const presetKey of INVENTORY_CATEGORY_PRESET_KEYS) {
       const label = t(presetKey);
       const count = rows.filter((it) => {
-        if (nq && !normalize(it.name).includes(nq)) return false;
+        if (!itemMatchesHubQuery(it)) return false;
         return normalize(it.category) === normalize(label);
       }).length;
       list.push({
@@ -224,19 +260,9 @@ export function InventoryHubScreen() {
         count,
       });
     }
-
-    const presetLabels = new Set(
-      INVENTORY_CATEGORY_PRESET_KEYS.map((k) => normalize(t(k)))
-    );
     const customNames = new Set();
     for (const it of rows) {
       const c = String(it.category || '').trim();
-      if (!c) continue;
-      if (presetLabels.has(normalize(c))) continue;
-      customNames.add(c);
-    }
-    for (const lab of extraCategories) {
-      const c = String(lab || '').trim();
       if (!c) continue;
       if (presetLabels.has(normalize(c))) continue;
       customNames.add(c);
@@ -246,7 +272,7 @@ export function InventoryHubScreen() {
     );
     for (const c of sortedCustom) {
       const count = rows.filter((it) => {
-        if (nq && !normalize(it.name).includes(nq)) return false;
+        if (!itemMatchesHubQuery(it)) return false;
         return normalize(it.category) === normalize(c);
       }).length;
       list.push({
@@ -288,6 +314,13 @@ export function InventoryHubScreen() {
 
   const typesCountVisible = displayCardsForGrid.length;
 
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [editingId, setEditingId] = useState(null);
+  const [initialName, setInitialName] = useState('');
+  const [initialCategory, setInitialCategory] = useState('');
+  const [initialUnitPriceStr, setInitialUnitPriceStr] = useState('');
+  const [initialImageUri, setInitialImageUri] = useState(null);
+
   const scrollToCategoryGrid = useCallback(() => {
     const y = gridAnchorY.current;
     scrollRef.current?.scrollTo({
@@ -311,6 +344,24 @@ export function InventoryHubScreen() {
     }
     setTimeout(() => scrollToCategoryGrid(), delay);
   }, [nq, scrollToCategoryGrid]);
+
+  const openEdit = (item) => {
+    setEditingId(item.id);
+    setInitialName(item.name || '');
+    setInitialCategory(String(item.category || '').trim());
+    setInitialUnitPriceStr(
+      item.unitPrice != null && Number.isFinite(Number(item.unitPrice))
+        ? String(item.unitPrice)
+        : ''
+    );
+    setInitialImageUri(item.imageUrl || item.imageLocalUri || null);
+    setEditorOpen(true);
+  };
+
+  const closeEditor = () => {
+    setEditorOpen(false);
+    setEditingId(null);
+  };
 
   const submitNewCategory = useCallback(async () => {
     const name = newCatName.trim().slice(0, 80);
@@ -531,7 +582,7 @@ export function InventoryHubScreen() {
   const busy = Boolean(user?.ownerId) && loading;
 
   return (
-    <>
+    <View style={{ flex: 1 }}>
     <ScrollView
       ref={scrollRef}
       stickyHeaderIndices={[1]}
@@ -571,6 +622,16 @@ export function InventoryHubScreen() {
             accessibilityLabel={t('inv_hubPlusUncatA11y')}
           />
         </View>
+
+        <InventoryProductEditorModal
+          visible={editorOpen}
+          onDismiss={closeEditor}
+          editingId={editingId}
+          initialName={initialName}
+          initialCategory={initialCategory}
+          initialUnitPriceStr={initialUnitPriceStr}
+          initialImageUri={initialImageUri}
+        />
       </View>
 
       <View
@@ -748,7 +809,51 @@ export function InventoryHubScreen() {
           subtitle={t('inv_emptySearchSubtitle')}
         />
       ) : (
-        <View style={styles.grid}>
+        <>
+          {nq && matchedProducts.length > 0 ? (
+            <View style={styles.searchResultsSection}>
+              <Text style={[styles.searchResultsTitle, { color: theme.colors.onSurface }]}> 
+                {t('inv_hubSearchResultsTitle')}
+              </Text>
+              {matchedProducts.map((item) => {
+                const categoryLabel = String(item.category || '').trim() || t('inv_filterUncat');
+                return (
+                  <Pressable
+                    key={item.id}
+                    onPress={() => openEdit(item)}
+                    style={[
+                      styles.productResultCard,
+                      {
+                        backgroundColor: theme.colors.surface,
+                        borderColor: theme.colors.outlineVariant || theme.colors.outline,
+                      },
+                    ]}
+                  >
+                    <View style={styles.productResultRow}>
+                      {item.imageUrl || item.imageLocalUri ? (
+                        <View style={styles.productThumbWrap}>
+                          <Image
+                            source={{ uri: item.imageUrl || item.imageLocalUri }}
+                            style={styles.productThumb}
+                            resizeMode="cover"
+                          />
+                        </View>
+                      ) : null}
+                      <View style={styles.productResultText}>
+                        <Text variant="titleMedium" style={[styles.productResultName, { color: theme.colors.onSurface }]}> 
+                          {item.name}
+                        </Text>
+                        <Text variant="bodySmall" style={[styles.productResultMeta, { color: theme.colors.onSurfaceVariant }]}> 
+                          {categoryLabel} · {hasPrice(item) ? formatPeso(item.unitPrice) : t('inv_noDefaultPrice')}
+                        </Text>
+                      </View>
+                    </View>
+                  </Pressable>
+                );
+              })}
+            </View>
+          ) : null}
+          <View style={styles.grid}>
           {displayCardsForGrid.map((c) => (
             (() => {
               const stickerOverride =
@@ -861,6 +966,7 @@ export function InventoryHubScreen() {
             })()
           ))}
         </View>
+        </>
       )}
       </View>
       </View>
@@ -969,7 +1075,7 @@ export function InventoryHubScreen() {
         if (pending) await performCategoryRemoval(pending);
       }}
     />
-    </>
+    </View>
   );
 }
 
@@ -1118,6 +1224,30 @@ const styles = StyleSheet.create({
   cardTitle: { fontFamily: font.extraBold, textAlign: 'center', fontSize: 13, color: '#1a2e1f' },
   cardCount: { fontFamily: font.extraBold, marginTop: 6, fontSize: 28, lineHeight: 28 },
   cardSub: { marginTop: 2, color: '#9ab09e', textAlign: 'center' },
+  searchResultsSection: { marginBottom: 16 },
+  searchResultsTitle: { fontFamily: font.extraBold, fontSize: 15, marginBottom: 10 },
+  productResultCard: {
+    borderWidth: 1,
+    borderRadius: 14,
+    padding: 12,
+    marginBottom: 10,
+  },
+  productResultRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  productResultText: { flex: 1, minWidth: 0 },
+  productResultName: { fontFamily: font.extraBold, fontSize: 15 },
+  productResultMeta: { fontFamily: font.medium, lineHeight: 18, marginTop: 3 },
+  productThumbWrap: {
+    width: 56,
+    height: 56,
+    borderRadius: 10,
+    overflow: 'hidden',
+    marginRight: 10,
+  },
+  productThumb: { width: 56, height: 56 },
 
   cardBgGreen: { colors: ['#e8f5ed', '#f0faf3'] },
   cardBgAmber: { colors: ['#fef3e2', '#fff8ed'] },

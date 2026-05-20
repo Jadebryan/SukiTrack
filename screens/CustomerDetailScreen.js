@@ -433,12 +433,22 @@ export function CustomerDetailScreen() {
     setSaving(true);
     try {
       if (payload.type === 'utang') {
-        await addPageItem(user.ownerId, customerId, {
-          amount: payload.amount,
-          description:
-            (payload.note && String(payload.note).trim()) || t('common_item'),
-          note: '',
-        });
+        if (Array.isArray(payload.items)) {
+          for (const item of payload.items) {
+            await addPageItem(user.ownerId, customerId, {
+              amount: item.amount,
+              description: item.description || t('common_item'),
+              note: '',
+            });
+          }
+        } else {
+          await addPageItem(user.ownerId, customerId, {
+            amount: payload.amount,
+            description:
+              (payload.note && String(payload.note).trim()) || t('common_item'),
+            note: '',
+          });
+        }
       } else {
         const prevDue =
           openPage != null ? Math.max(0, Number(openPage.due) || 0) : 0;
@@ -561,7 +571,7 @@ export function CustomerDetailScreen() {
         >
           {t('cd_addItem')}
         </Button>
-        <Button
+          <Button
           mode="contained-tonal"
           icon="cash"
           onPress={openPayment}

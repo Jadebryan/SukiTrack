@@ -407,6 +407,7 @@ export const STRINGS = {
     inv_deleteA11y: 'Delete product',
     inv_searchPlaceholder: 'Search products…',
     inv_hubSearchCategoryHint: 'Matches product names and category titles.',
+    inv_hubSearchResultsTitle: 'Matching products',
     inv_hubPlusUncatA11y: 'Add product (opens uncategorized list)',
     inv_sortLabel: 'Sort',
     inv_sortName: 'Name',

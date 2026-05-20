@@ -11,7 +11,7 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Button, Card, FAB, Text, useTheme } from 'react-native-paper';
+import { Button, Card, FAB, Searchbar, Text, useTheme } from 'react-native-paper';
 import { AppConfirmDialog } from '@/components/AppConfirmDialog';
 import { EmptyState } from '@/components/EmptyState';
 import { InventoryProductEditorModal } from '@/components/InventoryProductEditorModal';
@@ -29,6 +29,10 @@ import { updateInventoryItem } from '@/services/inventoryService';
 import { formatPeso } from '@/utils/currency';
 import { itemMatchesCategorySlug, slugToCategory } from '@/utils/categoryRoute';
 
+function normalize(s) {
+  return String(s || '').toLowerCase().trim();
+}
+
 function hasPrice(it) {
   return it.unitPrice != null && Number.isFinite(Number(it.unitPrice));
 }
@@ -43,6 +47,7 @@ export function InventoryCategoryScreen() {
   const insets = useSafeAreaInsets();
   const { inventory, refresh, loading, error } = useShopData();
   const [refreshing, setRefreshing] = useState(false);
+  const [q, setQ] = useState('');
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [initialName, setInitialName] = useState('');
@@ -68,15 +73,23 @@ export function InventoryCategoryScreen() {
   );
 
   const rows = useMemo(() => inventory || [], [inventory]);
+  const nq = useMemo(() => normalize(q), [q]);
 
   const filtered = useMemo(() => {
     const list = rows.filter((it) => itemMatchesCategorySlug(it, slug, t));
-    return [...list].sort((a, b) =>
+    const matches = list.filter((it) => {
+      if (!nq) return true;
+      return (
+        normalize(it.name).includes(nq) ||
+        normalize(String(it.category || '')).includes(nq)
+      );
+    });
+    return [...matches].sort((a, b) =>
       String(a.name || '').localeCompare(String(b.name || ''), 'en', {
         sensitivity: 'base',
       })
     );
-  }, [rows, slug, t]);
+  }, [rows, slug, t, nq]);
 
   const runBulkUncat = useCallback(
     async (snapshot) => {
@@ -281,17 +294,31 @@ export function InventoryCategoryScreen() {
                   {error?.message || t('common_error')}
                 </Text>
               ) : null}
-            <Text variant="bodySmall" style={styles.hint}>
-              {t('inv_catScreenHint')}
-            </Text>
-            {Boolean(categoryStored.trim()) && filtered.length > 0 ? (
-              <Text
-                variant="bodySmall"
-                style={[styles.bulkHint, { color: theme.colors.onSurfaceVariant }]}
-              >
-                {t('inv_catBulkHeaderHint')}
+              <Searchbar
+                placeholder={t('inv_searchPlaceholder')}
+                value={q}
+                onChangeText={setQ}
+                style={[
+                  styles.search,
+                  {
+                    backgroundColor: theme.colors.surface,
+                    borderColor: theme.colors.outlineVariant || theme.colors.outline,
+                  },
+                ]}
+                inputStyle={{ color: theme.colors.onSurface }}
+                elevation={0}
+              />
+              <Text variant="bodySmall" style={styles.hint}>
+                {t('inv_catScreenHint')}
               </Text>
-            ) : null}
+              {Boolean(categoryStored.trim()) && filtered.length > 0 ? (
+                <Text
+                  variant="bodySmall"
+                  style={[styles.bulkHint, { color: theme.colors.onSurfaceVariant }]}
+                >
+                  {t('inv_catBulkHeaderHint')}
+                </Text>
+              ) : null}
             </View>
           }
           contentContainerStyle={[
@@ -413,6 +440,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 8,
     paddingBottom: 4,
+  },
+  search: {
+    marginBottom: 10,
+    borderWidth: 1,
   },
   hint: {
     opacity: 0.75,
