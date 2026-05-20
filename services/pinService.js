@@ -66,6 +66,12 @@ export async function verifyPinWithLockout(pin) {
       STORAGE_KEYS.PIN_FAIL_COUNT,
       STORAGE_KEYS.PIN_LOCK_UNTIL,
     ]);
+    // record last successful unlock
+    try {
+      await AsyncStorage.setItem(STORAGE_KEYS.PIN_LAST_UNLOCK_AT, String(Date.now()));
+    } catch {
+      /* ignore */
+    }
     return { ok: true, locked: false };
   }
   const prev = Number(await AsyncStorage.getItem(STORAGE_KEYS.PIN_FAIL_COUNT)) || 0;
@@ -90,4 +96,14 @@ export async function clearPin() {
     STORAGE_KEYS.PIN_FAIL_COUNT,
     STORAGE_KEYS.PIN_LOCK_UNTIL,
   ]);
+}
+
+export async function getLastUnlockAtMs() {
+  const v = await AsyncStorage.getItem(STORAGE_KEYS.PIN_LAST_UNLOCK_AT);
+  const n = v ? Number(v) : 0;
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
+export async function clearLastUnlockAt() {
+  await AsyncStorage.removeItem(STORAGE_KEYS.PIN_LAST_UNLOCK_AT);
 }

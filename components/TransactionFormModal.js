@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { Keyboard, ScrollView, StyleSheet, View } from 'react-native';
 import {
   Avatar,
   Button,
@@ -9,6 +9,7 @@ import {
   TextInput,
   useTheme,
 } from 'react-native-paper';
+import { AppConfirmDialog } from '@/components/AppConfirmDialog';
 import { KeyboardAwareOverlayModal } from '@/components/KeyboardAwareOverlayModal';
 import { font } from '@/constants/theme';
 import { useLocale } from '@/contexts/LocaleContext';
@@ -40,6 +41,7 @@ export function TransactionFormModal({
   const [amount, setAmount] = useState('');
   const [note, setNote] = useState('');
   const [entries, setEntries] = useState([]);
+  const [discardOpen, setDiscardOpen] = useState(false);
 
   useEffect(() => {
     if (visible) {
@@ -49,6 +51,21 @@ export function TransactionFormModal({
       setEntries([]);
     }
   }, [visible, initialType]);
+
+  // Check if there are unsaved changes
+  const hasChanges = () => {
+    return amount.trim() !== '' || note.trim() !== '' || entries.length > 0;
+  };
+
+  const handleDismiss = () => {
+    if (submitting) return;
+    if (hasChanges()) {
+      setDiscardOpen(true);
+    } else {
+      Keyboard.dismiss();
+      onDismiss();
+    }
+  };
 
   useEffect(() => {
     if (type !== 'utang') {
@@ -153,11 +170,12 @@ export function TransactionFormModal({
   };
 
   return (
-    <KeyboardAwareOverlayModal
-      visible={visible}
-      onDismiss={onDismiss}
-      dismissable={!submitting}
-      renderContent={({ sheetMaxHeight }) => (
+    <>
+      <KeyboardAwareOverlayModal
+        visible={visible}
+        onDismiss={handleDismiss}
+        dismissable={!submitting}
+        renderContent={({ sheetMaxHeight }) => (
         <ScrollView
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
@@ -301,7 +319,7 @@ export function TransactionFormModal({
           ) : null}
 
           <View style={styles.actions}>
-            <Button mode="text" onPress={onDismiss} disabled={submitting}>
+            <Button mode="text" onPress={handleDismiss} disabled={submitting}>
               {t('common_cancel')}
             </Button>
             {type === 'utang' ? (
@@ -333,6 +351,26 @@ export function TransactionFormModal({
         </ScrollView>
       )}
     />
+
+    <AppConfirmDialog
+      visible={discardOpen}
+      title={t('tm_discardTitle')}
+      message={t('tm_discardMsg')}
+      confirmText={t('common_discard')}
+      cancelText={t('common_cancel')}
+      destructive
+      useNativeModal
+      confirmDisabled={submitting}
+      onCancel={() => {
+        setDiscardOpen(false);
+      }}
+      onConfirm={() => {
+        setDiscardOpen(false);
+        Keyboard.dismiss();
+        onDismiss();
+      }}
+    />
+    </>
   );
 }
 

@@ -16,6 +16,7 @@ import { useTheme } from 'react-native-paper';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { AppThemeProvider, useAppTheme } from '@/contexts/AppThemeContext';
 import { LocaleProvider, useLocale } from '@/contexts/LocaleContext';
+import { NotificationProvider } from '@/contexts/NotificationContext';
 import { ShopDataProvider } from '@/contexts/ShopDataContext';
 import {
   getHeaderScreenOptions,
@@ -132,9 +133,11 @@ export default function RootLayout() {
     <AppThemeProvider>
       <LocaleProvider>
         <AuthProvider>
-          <DataShell>
-            <ThemedStack />
-          </DataShell>
+          <NotificationProvider>
+            <DataShell>
+              <ThemedStack />
+            </DataShell>
+          </NotificationProvider>
         </AuthProvider>
       </LocaleProvider>
     </AppThemeProvider>

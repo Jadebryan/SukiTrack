@@ -97,6 +97,9 @@ export function SettingsScreen() {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmCfg, setConfirmCfg] = useState(null);
   const [pinStepUp, setPinStepUp] = useState(null);
+  const [pinTimeoutMs, setPinTimeoutMs] = useState(0);
+  const [pinTimeoutOpen, setPinTimeoutOpen] = useState(false);
+  const [pinTimeoutDraft, setPinTimeoutDraft] = useState(0);
   const [langOpen, setLangOpen] = useState(false);
   const [langDraft, setLangDraft] = useState(locale);
   const [privacyOpen, setPrivacyOpen] = useState(false);
@@ -270,6 +273,32 @@ export function SettingsScreen() {
     };
   }, [isDark, theme]);
 
+  // load PIN timeout preference
+  useFocusEffect(
+    useCallback(() => {
+      let alive = true;
+      void (async () => {
+        const v = await preferencesService.getPinUnlockTimeoutMs();
+        if (!alive) return;
+        setPinTimeoutMs(v || 0);
+        setPinTimeoutDraft(v || 0);
+      })();
+      return () => {
+        alive = false;
+      };
+    }, [])
+  );
+
+  function formatPinTimeoutLabel(ms) {
+    if (!ms || ms <= 0) return 'Require PIN every login';
+    const mins = Math.round(ms / 60000);
+    if (mins < 60) return `Require PIN after ${mins} minute${mins === 1 ? '' : 's'}`;
+    const hours = Math.round(mins / 60);
+    if (hours < 24) return `Require PIN after ${hours} hour${hours === 1 ? '' : 's'}`;
+    const days = Math.round(hours / 24);
+    return `Require PIN after ${days} day${days === 1 ? '' : 's'}`;
+  }
+
   return (
     <View style={[styles.screen, { backgroundColor: C.bg }]}>
       <ScrollView
@@ -396,6 +425,15 @@ export function SettingsScreen() {
             />
             <View style={[styles.div, { backgroundColor: C.border }]} />
             <SettingsRow
+              icon="timer-sand"
+              iconBg={C.surface2}
+              iconColor={C.text2}
+              title={'PIN timeout'}
+              subtitle={formatPinTimeoutLabel(pinTimeoutMs)}
+              onPress={() => setPinTimeoutOpen(true)}
+            />
+            <View style={[styles.div, { backgroundColor: C.border }]} />
+            <SettingsRow
               icon="key-variant"
               iconBg={C.amberLight}
               iconColor={C.amber}
@@ -511,6 +549,30 @@ export function SettingsScreen() {
           </Dialog.Actions>
         </Dialog>
       </Portal>
+
+      <AppChoiceDialog
+        visible={pinTimeoutOpen}
+        title={'PIN timeout'}
+        message={'Choose how long the app should remember your PIN unlock before asking again.'}
+        choices={[
+          { id: '0', title: 'Require PIN every login', icon: 'lock', iconBg: C.surface2, iconColor: C.text2 },
+          { id: String(60_000), title: 'Require PIN after 1 minute', icon: 'timer', iconBg: C.surface2, iconColor: C.text2 },
+          { id: String(5 * 60_000), title: 'Require PIN after 5 minutes', icon: 'timer', iconBg: C.surface2, iconColor: C.text2 },
+          { id: String(30 * 60_000), title: 'Require PIN after 30 minutes', icon: 'timer', iconBg: C.surface2, iconColor: C.text2 },
+          { id: String(24 * 60 * 60_000), title: 'Require PIN after 1 day', icon: 'timer-outline', iconBg: C.surface2, iconColor: C.text2 },
+        ]}
+        value={String(pinTimeoutDraft)}
+        onChange={(v) => setPinTimeoutDraft(Number(v))}
+        cancelText={t('common_cancel')}
+        confirmText={t('common_ok')}
+        onCancel={() => setPinTimeoutOpen(false)}
+        onConfirm={async () => {
+          await preferencesService.setPinUnlockTimeoutMs(pinTimeoutDraft);
+          setPinTimeoutMs(pinTimeoutDraft);
+          setPinTimeoutOpen(false);
+          showToast({ type: 'success', message: 'PIN timeout updated' });
+        }}
+      />
 
       <Portal>
         <Dialog

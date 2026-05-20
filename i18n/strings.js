@@ -9,10 +9,13 @@ export const STRINGS = {
     common_customer: 'Customer',
     common_cancel: 'Cancel',
     common_save: 'Save',
+    common_select: 'Select',
+    common_deselect: 'Deselect',
     common_ok: 'OK',
     common_yes: 'Yes',
     common_no: 'No',
     common_undo: 'Undo',
+    common_discard: 'Discard',
     common_item: 'Item',
     common_payment: 'Payment',
     app_name: 'SukiTrack',
@@ -279,6 +282,7 @@ export const STRINGS = {
 
     ac_errSave: 'Could not save customer.',
     ac_errNoId: 'No ID returned from server.',
+    ac_dupName: 'A customer with that name already exists.',
     ac_name: 'Name *',
     ac_contact: 'Contact (optional)',
     ac_address: 'Address (optional)',
@@ -372,6 +376,8 @@ export const STRINGS = {
     tm_note: 'Note (optional)',
     tm_amountErrTitle: 'Amount required',
     tm_amountErrMsg: 'Enter an amount greater than 0 (e.g. 25 or 100.50).',
+    tm_discardTitle: 'Discard changes?',
+    tm_discardMsg: 'Your changes will be lost. Proceed?',
 
     // Inventory (product catalog)
     inv_intro:
@@ -405,6 +411,8 @@ export const STRINGS = {
     inv_deleteMsg: 'Remove “{name}” from inventory?',
     inv_editA11y: 'Edit product',
     inv_deleteA11y: 'Delete product',
+    inv_discardTitle: 'Discard changes?',
+    inv_discardMsg: 'Your changes will be lost. Proceed?',
     inv_searchPlaceholder: 'Search products…',
     inv_hubSearchCategoryHint: 'Matches product names and category titles.',
     inv_hubSearchResultsTitle: 'Matching products',
@@ -484,6 +492,20 @@ export const STRINGS = {
     inv_catScreenHint: 'Tap a row to edit. Use + to add a product in this type.',
     inv_catBulkHeaderHint:
       'Tip: the “Uncategorize all” action in the top bar moves every product here to Uncategorized (you can Undo right after).',
+    inv_catBulkSelectedHint:
+      'Select products to move or uncategorize them in bulk.',
+    inv_bulkSelect: 'Select products',
+    inv_bulkSelectedCount: '{count} selected',
+    inv_bulkMove: 'Move',
+    inv_bulkMoveTitle: 'Move selected products',
+    inv_bulkMoveHint:
+      'Move {count} selected product(s) from “{category}” to another type.',
+    inv_bulkMoveConfirm: 'Move',
+    inv_bulkMoveToast: '{count} product(s) moved to {category}.',
+    inv_bulkMoveUndoDone: 'Products were moved back to {category}.',
+    inv_bulkMoveUndoFail: 'Could not undo. Fix categories manually if needed.',
+    inv_bulkUncatSelected: 'Uncategorize selected',
+    inv_categoryPlaceholder: 'e.g. School supplies',
     inv_catEmptyTitle: 'Nothing here yet',
     inv_catEmptySubtitle: 'Tap + to add a product in this category.',
     inv_bulkUncatTitle: 'Uncategorize all?',
@@ -665,10 +687,13 @@ export const STRINGS = {
     common_customer: 'Customer',
     common_cancel: 'Kanselahin',
     common_save: 'I-save',
+    common_select: 'Piliin',
+    common_deselect: 'Huwag piliin',
     common_ok: 'Sige',
     common_yes: 'Oo',
     common_no: 'Hindi',
     common_undo: 'Ibalik',
+    common_discard: 'I-discard',
     common_item: 'Item',
     common_payment: 'Bayad',
     app_name: 'SukiTrack',
@@ -933,6 +958,7 @@ export const STRINGS = {
 
     ac_errSave: 'Hindi na-save ang customer.',
     ac_errNoId: 'Walang ID mula sa server.',
+    ac_dupName: 'Mayroon nang customer na may ganitong pangalan.',
     ac_name: 'Pangalan *',
     ac_contact: 'Contact (opsyonal)',
     ac_address: 'Address (opsyonal)',
@@ -1025,6 +1051,8 @@ export const STRINGS = {
     tm_amountErrTitle: 'Kulang ang halaga',
     tm_amountErrMsg:
       'Maglagay ng halaga na mas mataas sa 0 (hal. 25 o 100.50).',
+    tm_discardTitle: 'I-discard ang mga pagbabago?',
+    tm_discardMsg: 'Mawawala ang iyong mga pagbabago. Magpatuloy?',
 
     inv_intro:
       'Magdagdag ng produktong binebenta mo. Kapag nag-utang, lalabas ang may kaparehong pangalan bilang mungkahi.',
@@ -1057,6 +1085,8 @@ export const STRINGS = {
     inv_deleteMsg: 'Alisin ang “{name}” sa imbentaryo?',
     inv_editA11y: 'I-edit ang produkto',
     inv_deleteA11y: 'Burahin ang produkto',
+    inv_discardTitle: 'I-discard ang mga pagbabago?',
+    inv_discardMsg: 'Mawawala ang iyong mga pagbabago. Magpatuloy?',
     inv_searchPlaceholder: 'Hanapin ang produkto…',
     inv_hubSearchCategoryHint: 'Tumutugma sa pangalan ng produkto at pamagat ng kategorya.',
     inv_hubPlusUncatA11y: 'Magdagdag ng produkto (bubuksan ang listahang walang kategorya)',
@@ -1138,6 +1168,20 @@ export const STRINGS = {
       'Pindutin ang row para i-edit. Gamitin ang + para magdagdag sa uri na ito.',
     inv_catBulkHeaderHint:
       'Tip: ang “Ilipat lahat sa walang kategorya” sa taas ay inililipat ang lahat ng produkto dito (maaaring Ibalik agad).',
+    inv_catBulkSelectedHint:
+      'Piliin ang mga produkto para sabay-sabay ilipat o tanggalin ang kategorya.',
+    inv_bulkSelect: 'Piliin ang mga produkto',
+    inv_bulkSelectedCount: '{count} napili',
+    inv_bulkMove: 'Ilipat',
+    inv_bulkMoveTitle: 'Ilipat ang napiling produkto',
+    inv_bulkMoveHint:
+      'Ililipat ang {count} napiling produkto mula sa “{category}” patungo sa ibang uri.',
+    inv_bulkMoveConfirm: 'Ilipat',
+    inv_bulkMoveToast: '{count} produkto ang nailipat sa {category}.',
+    inv_bulkMoveUndoDone: 'Naibalik ang mga produkto sa {category}.',
+    inv_bulkMoveUndoFail: 'Hindi na-undo. Ayusin ang mga kategorya nang mano-mano kung kailangan.',
+    inv_bulkUncatSelected: 'Tanggalin kategorya ng napili',
+    inv_categoryPlaceholder: 'hal. Gamit sa eskwela',
     inv_catEmptyTitle: 'Wala pang laman dito',
     inv_catEmptySubtitle: 'Pindutin ang + para magdagdag ng produkto sa kategoryang ito.',
     inv_bulkUncatTitle: 'Ilipat lahat sa walang kategorya?',

@@ -15,6 +15,10 @@ export const STORAGE_KEYS = {
   PIN_FAIL_COUNT: 'utang_ph_pin_fail_count',
   /** Epoch ms until PIN entry is allowed again. */
   PIN_LOCK_UNTIL: 'utang_ph_pin_lock_until',
+  /** Epoch ms of last successful PIN unlock */
+  PIN_LAST_UNLOCK_AT: 'utang_ph_pin_last_unlock_at',
+  /** Pin unlock timeout in ms (device preference). 0 = always require PIN */
+  PIN_UNLOCK_TIMEOUT_MS: 'utang_ph_pin_unlock_timeout_ms',
   USER_EMAIL: 'utang_ph_user_email',
   /** JSON `{ [ownerId]: string[] }` — custom inventory category labels with no products yet. */
   INVENTORY_EXTRA_CATEGORIES: 'utang_ph_inv_extra_categories',
@@ -26,4 +30,8 @@ export const STORAGE_KEYS = {
   PENDING_HOME_ADD_CUSTOMER: 'utang_ph_pending_home_add_customer',
   /** '1' after user dismissed the home navigation tips card. */
   NAV_TIPS_DISMISSED: 'utang_ph_nav_tips_dismissed',
+  /** Expo push notification token for this device. */
+  PUSH_TOKEN: 'utang_ph_push_token',
+  /** Stable device ID for this app install. */
+  DEVICE_ID: 'utang_ph_device_id',
 };

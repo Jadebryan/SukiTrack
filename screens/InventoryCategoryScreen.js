@@ -11,13 +11,15 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Button, Card, FAB, Searchbar, Text, useTheme } from 'react-native-paper';
+import { Button, Card, Chip, Dialog, FAB, IconButton, Portal, Searchbar, Text, TextInput, useTheme } from 'react-native-paper';
 import { AppConfirmDialog } from '@/components/AppConfirmDialog';
 import { EmptyState } from '@/components/EmptyState';
 import { InventoryProductEditorModal } from '@/components/InventoryProductEditorModal';
+import ProductImage from '@/components/ProductImage';
 import { InventoryProductListSkeleton } from '@/components/Skeleton';
 import { VerifyPinModal } from '@/components/VerifyPinModal';
 import { getTabBarOuterHeight } from '@/constants/tabBar';
+import { INVENTORY_CATEGORY_PRESET_KEYS } from '@/constants/inventoryCategories';
 import { font } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLocale } from '@/contexts/LocaleContext';
@@ -57,7 +59,12 @@ export function InventoryCategoryScreen() {
   const [bulkUncatConfirmOpen, setBulkUncatConfirmOpen] = useState(false);
   const [bulkUncatPinOpen, setBulkUncatPinOpen] = useState(false);
   const [bulkUncatBusy, setBulkUncatBusy] = useState(false);
-  const pendingBulkUncatSnapshotRef = useRef([]);
+  const [bulkMoveBusy, setBulkMoveBusy] = useState(false);
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [moveDialogOpen, setMoveDialogOpen] = useState(false);
+  const [moveCategory, setMoveCategory] = useState('');
+  const pendingBulkSnapshotRef = useRef([]);
 
   const slug = useMemo(() => {
     const raw = slugParam;
@@ -90,6 +97,19 @@ export function InventoryCategoryScreen() {
       })
     );
   }, [rows, slug, t, nq]);
+
+  const resetSelection = useCallback(() => {
+    setSelectionMode(false);
+    setSelectedIds([]);
+  }, []);
+
+  const toggleRowSelection = useCallback((id) => {
+    setSelectedIds((prev) => {
+      const next = prev.includes(id) ? prev.filter((itemId) => itemId !== id) : [...prev, id];
+      if (next.length === 0) setSelectionMode(false);
+      return next;
+    });
+  }, []);
 
   const runBulkUncat = useCallback(
     async (snapshot) => {
@@ -147,14 +167,87 @@ export function InventoryCategoryScreen() {
         showToast({ type: 'error', message: t('common_error') });
       } finally {
         setBulkUncatBusy(false);
-        pendingBulkUncatSnapshotRef.current = [];
+        pendingBulkSnapshotRef.current = [];
+        resetSelection();
       }
     },
-    [user?.ownerId, t, showToast, refresh]
+    [user?.ownerId, t, showToast, refresh, resetSelection]
+  );
+
+  const runBulkMove = useCallback(
+    async (snapshot, targetCategory) => {
+      if (!user?.ownerId || !snapshot?.length || !targetCategory?.trim()) return;
+      setBulkMoveBusy(true);
+      const doneIds = [];
+      try {
+        const categoryValue = targetCategory.trim().slice(0, 80);
+        for (const p of snapshot) {
+          await updateInventoryItem(p.id, {
+            name: p.name,
+            category: categoryValue,
+            unitPrice: p.unitPrice,
+          });
+          doneIds.push(p.id);
+        }
+        await refresh();
+        const online = await isOnline();
+        showToast({
+          type: online ? 'success' : 'warning',
+          message: online
+            ? t('inv_bulkMoveToast', {
+                count: snapshot.length,
+                category: categoryValue,
+              })
+            : t('toast_editsQueued'),
+          durationMs: 12_000,
+          actionLabel: t('common_undo'),
+          onAction: async () => {
+            try {
+              for (const row of snapshot) {
+                await updateInventoryItem(row.id, {
+                  name: row.name,
+                  category: row.category,
+                  unitPrice: row.unitPrice,
+                });
+              }
+              await refresh();
+              showToast({
+                type: 'success',
+                message: t('inv_bulkMoveUndoDone', {
+                  category: categoryValue,
+                }),
+              });
+            } catch {
+              showToast({ type: 'error', message: t('inv_bulkMoveUndoFail') });
+            }
+          },
+        });
+      } catch {
+        for (const id of [...doneIds].reverse()) {
+          const orig = snapshot.find((x) => x.id === id);
+          if (!orig) continue;
+          try {
+            await updateInventoryItem(id, {
+              name: orig.name,
+              category: orig.category,
+              unitPrice: orig.unitPrice,
+            });
+          } catch {
+            /* best-effort rollback */
+          }
+        }
+        showToast({ type: 'error', message: t('common_error') });
+      } finally {
+        setBulkMoveBusy(false);
+        pendingBulkSnapshotRef.current = [];
+        resetSelection();
+      }
+    },
+    [user?.ownerId, t, showToast, refresh, resetSelection]
   );
 
   const openBulkUncatFlow = useCallback(() => {
-    pendingBulkUncatSnapshotRef.current = filtered.map((it) => ({
+    pendingBulkSnapshotRef.current = filtered.map((it) => ({
       id: it.id,
       name: it.name,
       category: String(it.category || '').trim(),
@@ -162,6 +255,38 @@ export function InventoryCategoryScreen() {
     }));
     setBulkUncatConfirmOpen(true);
   }, [filtered]);
+
+  const openBulkSelectMode = useCallback(() => {
+    setSelectionMode(true);
+    setSelectedIds([]);
+  }, []);
+
+  const openBulkUncatSelectedFlow = useCallback(() => {
+    pendingBulkSnapshotRef.current = rows
+      .filter((it) => selectedIds.includes(it.id))
+      .map((it) => ({
+        id: it.id,
+        name: it.name,
+        category: String(it.category || '').trim(),
+        unitPrice: it.unitPrice,
+      }));
+    setBulkUncatConfirmOpen(true);
+  }, [rows, selectedIds]);
+
+  const openBulkMoveFlow = useCallback(() => {
+    pendingBulkSnapshotRef.current = rows
+      .filter((it) => selectedIds.includes(it.id))
+      .map((it) => ({
+        id: it.id,
+        name: it.name,
+        category: String(it.category || '').trim(),
+        unitPrice: it.unitPrice,
+      }));
+    setMoveCategory('');
+    setMoveDialogOpen(true);
+  }, [rows, selectedIds]);
+
+  const bulkActionBusy = bulkUncatBusy || bulkMoveBusy;
 
   useLayoutEffect(() => {
     const showBulk =
@@ -270,7 +395,8 @@ export function InventoryCategoryScreen() {
       </View>
     ) : null;
 
-  const bulkSnapshot = pendingBulkUncatSnapshotRef.current;
+  const selectedCount = selectedIds.length;
+  const bulkSnapshot = pendingBulkSnapshotRef.current;
   const bulkCount = bulkSnapshot.length;
   const bulkCategoryLabel = categoryStored.trim() || t('inv_filterUncat');
 
@@ -309,15 +435,19 @@ export function InventoryCategoryScreen() {
                 elevation={0}
               />
               <Text variant="bodySmall" style={styles.hint}>
-                {t('inv_catScreenHint')}
+                {selectionMode
+                  ? t('inv_catBulkSelectedHint', { count: selectedCount })
+                  : t('inv_catScreenHint')}
               </Text>
-              {Boolean(categoryStored.trim()) && filtered.length > 0 ? (
-                <Text
-                  variant="bodySmall"
-                  style={[styles.bulkHint, { color: theme.colors.onSurfaceVariant }]}
+              {!selectionMode && Boolean(categoryStored.trim()) && filtered.length > 0 ? (
+                <Button
+                  mode="outlined"
+                  compact
+                  onPress={openBulkSelectMode}
+                  style={styles.bulkSelectBtn}
                 >
-                  {t('inv_catBulkHeaderHint')}
-                </Text>
+                  {t('inv_bulkSelect')}
+                </Button>
               ) : null}
             </View>
           }
@@ -326,47 +456,117 @@ export function InventoryCategoryScreen() {
             { paddingBottom: fabBottom + 72 },
           ]}
           ListEmptyComponent={listEmpty}
-          renderItem={({ item }) => (
-            <Pressable
-              onPress={() => openEdit(item)}
-              style={styles.cardPress}
-              accessibilityRole="button"
-              accessibilityLabel={t('inv_editA11y')}
-            >
-              <Card mode="elevated" style={styles.card}>
-                <Card.Content style={styles.cardContent}>
-                  <View style={styles.cardMain}>
-                    <Text variant="titleMedium" style={styles.rowName}>
-                      {item.name}
-                    </Text>
-                    <Text variant="bodySmall" style={styles.rowSub}>
-                      {hasPrice(item)
-                        ? t('inv_defaultPrice', {
-                            price: formatPeso(item.unitPrice),
-                          })
-                        : t('inv_noDefaultPrice')}
-                    </Text>
-                  </View>
-                  {item.imageUrl || item.imageLocalUri ? (
-                    <View style={styles.stickerWrap}>
-                      <Image
-                        source={{ uri: item.imageUrl || item.imageLocalUri }}
-                        style={styles.stickerImg}
-                        resizeMode="cover"
+          renderItem={({ item }) => {
+            const selected = selectedIds.includes(item.id);
+            return (
+              <Pressable
+                onPress={() => {
+                  if (selectionMode) {
+                    toggleRowSelection(item.id);
+                    return;
+                  }
+                  openEdit(item);
+                }}
+                onLongPress={() => {
+                  if (!selectionMode) {
+                    setSelectionMode(true);
+                    setSelectedIds([item.id]);
+                  }
+                }}
+                style={[styles.cardPress, selected && styles.cardPressSelected]}
+                accessibilityLabel={t('inv_editA11y')}
+              >
+                <Card mode="elevated" style={[styles.card, selected && styles.cardSelected]}>
+                  <Card.Content
+                    style={[
+                      styles.cardContent,
+                      selectionMode && styles.cardContentSelect,
+                    ]}
+                  >
+                    {selectionMode ? (
+                      <IconButton
+                        icon={selected ? 'checkbox-marked' : 'checkbox-blank-outline'}
+                        size={24}
+                        onPress={() => toggleRowSelection(item.id)}
+                        style={styles.selectionIcon}
+                        containerColor="transparent"
+                        iconColor={selected ? theme.colors.primary : theme.colors.onSurfaceVariant}
+                        accessibilityLabel={
+                          selected
+                            ? t('common_deselect')
+                            : t('common_select')
+                        }
                       />
+                    ) : null}
+                    <View style={styles.cardMain}>
+                      <Text variant="titleMedium" style={styles.rowName}>
+                        {item.name}
+                      </Text>
+                      <Text variant="bodySmall" style={styles.rowSub}>
+                        {hasPrice(item)
+                          ? t('inv_defaultPrice', {
+                              price: formatPeso(item.unitPrice),
+                            })
+                          : t('inv_noDefaultPrice')}
+                      </Text>
                     </View>
-                  ) : null}
-                </Card.Content>
-              </Card>
-            </Pressable>
-          )}
+                    <View style={styles.stickerWrap}>
+                      <ProductImage uri={item.imageUrl || item.imageLocalUri} size={44} style={styles.stickerImg} />
+                    </View>
+                  </Card.Content>
+                </Card>
+              </Pressable>
+            );
+          }}
         />
-        <FAB
-          icon="plus"
-          style={[styles.fab, { bottom: fabBottom }]}
-          onPress={openCreate}
-          label={t('inv_add')}
-        />
+        {selectionMode ? (
+          <View
+            style={[
+              styles.bulkSelectionBar,
+              {
+                bottom: fabBottom,
+                borderColor: theme.colors.outlineVariant,
+                backgroundColor: theme.colors.surface,
+              },
+            ]}
+          >
+            <Text style={[styles.selectionLabel, { color: theme.colors.onSurface }]}> 
+              {t('inv_bulkSelectedCount', { count: selectedCount })}
+            </Text>
+            <View style={styles.selectionActions}>
+              <Button
+                mode="outlined"
+                compact
+                onPress={openBulkMoveFlow}
+                disabled={!selectedCount || bulkActionBusy}
+              >
+                {t('inv_bulkMove')}
+              </Button>
+              <Button
+                mode="contained"
+                compact
+                onPress={openBulkUncatSelectedFlow}
+                disabled={!selectedCount || bulkActionBusy}
+              >
+                {t('inv_bulkUncatSelected')}
+              </Button>
+              <IconButton
+                icon="close"
+                size={24}
+                onPress={resetSelection}
+                disabled={bulkActionBusy}
+                accessibilityLabel={t('common_cancel')}
+              />
+            </View>
+          </View>
+        ) : (
+          <FAB
+            icon="plus"
+            style={[styles.fab, { bottom: fabBottom }]}
+            onPress={openCreate}
+            label={t('inv_add')}
+          />
+        )}
 
         <InventoryProductEditorModal
           visible={editorOpen}
@@ -381,6 +581,65 @@ export function InventoryCategoryScreen() {
         />
       </KeyboardAvoidingView>
 
+      <Portal>
+        <Dialog
+          visible={moveDialogOpen}
+          onDismiss={() => setMoveDialogOpen(false)}
+          style={[styles.dialog, { borderColor: theme.colors.outlineVariant }]}
+        >
+          <Dialog.Title>{t('inv_bulkMoveTitle')}</Dialog.Title>
+          <Dialog.Content>
+            <Text style={[styles.moveDialogMsg, { color: theme.colors.onSurfaceVariant }]}> 
+              {t('inv_bulkMoveHint', {
+                count: selectedCount,
+                category: bulkCategoryLabel,
+              })}
+            </Text>
+            <TextInput
+              label={t('inv_category')}
+              value={moveCategory}
+              onChangeText={(value) => setMoveCategory(value.slice(0, 80))}
+              style={styles.input}
+              placeholder={t('inv_categoryPlaceholder')}
+            />
+            <Text variant="bodySmall" style={styles.modalSectionLabel}>
+              {t('inv_categoryQuick')}
+            </Text>
+            <View style={styles.modalPresetRow}>
+              {INVENTORY_CATEGORY_PRESET_KEYS.map((key) => (
+                <Chip
+                  key={key}
+                  compact
+                  style={styles.modalPresetChip}
+                  onPress={() => setMoveCategory(t(key))}
+                >
+                  {t(key)}
+                </Chip>
+              ))}
+            </View>
+          </Dialog.Content>
+          <Dialog.Actions style={styles.dialogActions}>
+            <Button onPress={() => setMoveDialogOpen(false)}>
+              {t('common_cancel')}
+            </Button>
+            <Button
+              mode="contained"
+              onPress={async () => {
+                setMoveDialogOpen(false);
+                const snap = pendingBulkSnapshotRef.current;
+                const targetCategory = moveCategory.trim();
+                if (!snap?.length || !targetCategory) return;
+                await runBulkMove(snap, targetCategory);
+              }}
+              disabled={!moveCategory.trim() || bulkActionBusy}
+              loading={bulkMoveBusy}
+            >
+              {t('inv_bulkMoveConfirm')}
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
+
       <AppConfirmDialog
         visible={bulkUncatConfirmOpen}
         title={t('inv_bulkUncatTitle')}
@@ -391,17 +650,17 @@ export function InventoryCategoryScreen() {
         confirmText={t('inv_bulkUncatConfirm')}
         cancelText={t('common_cancel')}
         destructive
-        confirmDisabled={bulkUncatBusy}
+        confirmDisabled={bulkActionBusy}
         onCancel={() => {
-          if (!bulkUncatBusy) {
+          if (!bulkActionBusy) {
             setBulkUncatConfirmOpen(false);
-            pendingBulkUncatSnapshotRef.current = [];
+            pendingBulkSnapshotRef.current = [];
           }
         }}
         onConfirm={() => {
           setBulkUncatConfirmOpen(false);
           void (async () => {
-            const snap = pendingBulkUncatSnapshotRef.current;
+            const snap = pendingBulkSnapshotRef.current;
             if (!snap?.length || !user?.ownerId) return;
             if (await pinService.hasPin()) {
               setBulkUncatPinOpen(true);
@@ -416,7 +675,7 @@ export function InventoryCategoryScreen() {
         visible={bulkUncatPinOpen}
         onDismiss={() => {
           setBulkUncatPinOpen(false);
-          pendingBulkUncatSnapshotRef.current = [];
+          pendingBulkSnapshotRef.current = [];
         }}
         title={t('inv_bulkUncatPinTitle')}
         message={t('inv_bulkUncatPinMsg')}
@@ -424,9 +683,9 @@ export function InventoryCategoryScreen() {
         confirmText={t('inv_bulkUncatPinConfirm')}
         onConfirmed={async () => {
           setBulkUncatPinOpen(false);
-          const snap = pendingBulkUncatSnapshotRef.current;
+          const snap = pendingBulkSnapshotRef.current;
           if (snap?.length) await runBulkUncat(snap);
-          else pendingBulkUncatSnapshotRef.current = [];
+          else pendingBulkSnapshotRef.current = [];
         }}
       />
     </>
@@ -456,8 +715,10 @@ const styles = StyleSheet.create({
   centerPad: { textAlign: 'center', padding: 24 },
   emptyWrap: { flex: 1, justifyContent: 'center', minHeight: 280 },
   cardPress: { paddingHorizontal: 16, marginBottom: 10 },
+  cardPressSelected: { opacity: 0.95 },
   card: { borderRadius: 14 },
   cardContent: { flexDirection: 'row', alignItems: 'center' },
+  cardContentSelect: { gap: 8 },
   cardMain: { flex: 1, minWidth: 0 },
   rowName: { fontFamily: font.extraBold },
   rowSub: { marginTop: 4, opacity: 0.75 },
@@ -470,5 +731,30 @@ const styles = StyleSheet.create({
     backgroundColor: '#f4f7f5',
   },
   stickerImg: { width: 52, height: 52 },
+  bulkSelectBtn: { alignSelf: 'flex-start', marginTop: 8 },
+  bulkSelectionBar: {
+    position: 'absolute',
+    left: 16,
+    right: 16,
+    borderTopWidth: 1,
+    borderRadius: 18,
+    padding: 12,
+  },
+  selectionLabel: { fontFamily: font.extraBold, marginBottom: 8 },
+  selectionActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  selectionIcon: { margin: 0, marginRight: -4 },
+  dialog: { alignSelf: 'center', width: '92%', maxWidth: 420 },
+  dialogActions: { paddingHorizontal: 16 },
+  moveDialogMsg: { lineHeight: 20, marginBottom: 12 },
+  cardSelected: { borderColor: '#2d8a4e', borderWidth: 1 },
+  input: { marginBottom: 10 },
+  modalSectionLabel: { marginTop: 12, marginBottom: 6 },
+  modalPresetRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  modalPresetChip: { marginBottom: 8 },
   fab: { position: 'absolute', right: 16 },
 });

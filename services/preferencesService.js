@@ -251,3 +251,15 @@ export async function getNavTipsDismissed() {
 export async function setNavTipsDismissed() {
   await AsyncStorage.setItem(STORAGE_KEYS.NAV_TIPS_DISMISSED, '1');
 }
+
+/** PIN unlock timeout preference (ms). 0 means always require PIN on resume. */
+export async function getPinUnlockTimeoutMs() {
+  const v = await AsyncStorage.getItem(STORAGE_KEYS.PIN_UNLOCK_TIMEOUT_MS);
+  const n = v ? Number(v) : 0;
+  return Number.isFinite(n) && n >= 0 ? n : 0;
+}
+
+export async function setPinUnlockTimeoutMs(ms) {
+  const n = Number(ms) || 0;
+  await AsyncStorage.setItem(STORAGE_KEYS.PIN_UNLOCK_TIMEOUT_MS, String(n));
+}

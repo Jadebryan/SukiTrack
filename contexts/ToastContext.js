@@ -134,6 +134,7 @@ export function ToastProvider({ children, isDark = false }) {
               isDark={isDark}
               actionLabel={actionLabel}
               onActionPress={hasActionButton ? handleActionPress : null}
+              durationMs={durationMs}
             />
           </View>
         </Portal>

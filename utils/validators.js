@@ -21,6 +21,14 @@ export function sanitizeAlphanumeric(v) {
 }
 
 /**
+ * Keep text content with special characters allowed. Collapses multiple spaces.
+ * @param {string} v
+ */
+export function sanitizeText(v) {
+  return safeString(v).replace(/\s+/g, ' ');
+}
+
+/**
  * Keep only digits (0-9).
  * @param {string} v
  */

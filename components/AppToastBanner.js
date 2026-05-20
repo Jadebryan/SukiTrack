@@ -1,5 +1,7 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useTheme } from 'react-native-paper';
 import { font } from '@/constants/theme';
 
 /**
@@ -20,99 +22,91 @@ export function AppToastBanner({
   isDark = false,
   actionLabel,
   onActionPress,
+  durationMs = null,
 }) {
+  const theme = useTheme();
   const tone = TONE[type] || TONE.info;
-  const bar = isDark ? tone.barDark : tone.barLight;
-  const showAction =
-    Boolean(actionLabel && String(actionLabel).trim() && onActionPress);
+  const showAction = Boolean(actionLabel && String(actionLabel).trim() && onActionPress);
+
+  const progress = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    progress.setValue(0);
+    const ms = Number.isFinite(Number(durationMs)) && durationMs > 0 ? durationMs : 3800;
+    Animated.timing(progress, {
+      toValue: 1,
+      duration: ms,
+      useNativeDriver: false,
+    }).start();
+    return () => progress.stopAnimation();
+  }, [progress, durationMs, message]);
+
+  const progressWidth = progress.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0%', '100%'],
+  });
 
   return (
-    <View
-      style={[styles.wrap, { backgroundColor: bar }]}
-      accessibilityRole="alert"
-    >
-      <View style={styles.iconBubble}>
-        <MaterialCommunityIcons name={tone.icon} size={20} color="#ffffff" />
-      </View>
-      <Text style={styles.msg} numberOfLines={5}>
-        {message}
-      </Text>
-      {showAction ? (
-        <>
-          <Pressable
-            onPress={onActionPress}
-            style={({ pressed }) => [
-              styles.actionPill,
-              pressed && styles.actionPillPressed,
-            ]}
-            accessibilityRole="button"
-            accessibilityLabel={actionLabel}
-          >
-            <Text style={styles.actionText}>{actionLabel}</Text>
+    <View style={[styles.outer]} accessibilityRole="alert">
+      <View style={[styles.card, { backgroundColor: theme.colors.surface }]}> 
+        <View style={[styles.accent, { backgroundColor: tone.accent }]} />
+        <View style={styles.contentRow}>
+          <View style={[styles.iconBubble, { backgroundColor: tone.accent }]}> 
+            <MaterialCommunityIcons name={tone.icon} size={18} color="#fff" />
+          </View>
+          <Text style={[styles.msg, { color: theme.colors.onSurface }]} numberOfLines={3}>
+            {message}
+          </Text>
+          {showAction ? (
+            <Pressable onPress={onActionPress} style={styles.actionBtn} accessibilityRole="button">
+              <Text style={[styles.actionText, { color: tone.accent }]}>{actionLabel}</Text>
+            </Pressable>
+          ) : null}
+          <Pressable onPress={onDismiss} hitSlop={12} accessibilityRole="button" accessibilityLabel="Dismiss" style={styles.closeBtn}>
+            <MaterialCommunityIcons name="close" size={18} color={theme.colors.onSurface} />
           </Pressable>
-          <View style={styles.divider} />
-        </>
-      ) : null}
-      <Pressable
-        onPress={onDismiss}
-        hitSlop={12}
-        accessibilityRole="button"
-        accessibilityLabel="Dismiss"
-        style={({ pressed }) => [styles.closeBtn, pressed && { opacity: 0.7 }]}
-      >
-        <MaterialCommunityIcons name="close" size={22} color="#ffffff" />
-      </Pressable>
+        </View>
+        <Animated.View style={[styles.progress, { backgroundColor: tone.accent, width: progressWidth }]} />
+      </View>
     </View>
   );
 }
 
 /** Medium-saturation fills (readable white text at ~15:1 on bar). */
 const TONE = {
-  success: {
-    barLight: '#15803d',
-    barDark: '#166534',
-    icon: 'check',
-  },
-  info: {
-    barLight: '#2563eb',
-    barDark: '#1d4ed8',
-    icon: 'information',
-  },
-  warning: {
-    barLight: '#c2410c',
-    barDark: '#9a3412',
-    icon: 'alert',
-  },
-  error: {
-    barLight: '#dc2626',
-    barDark: '#b91c1c',
-    icon: 'alert',
-  },
+  success: { accent: '#16a34a', icon: 'check' },
+  info: { accent: '#2563eb', icon: 'information' },
+  warning: { accent: '#f97316', icon: 'alert' },
+  error: { accent: '#ef4444', icon: 'alert' },
 };
 
 const ICON = 36;
 
 const styles = StyleSheet.create({
-  wrap: {
+  outer: { paddingVertical: 4 },
+  card: {
+    flexDirection: 'column',
+    borderRadius: 12,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+    elevation: 12,
+  },
+  accent: { position: 'absolute', left: 0, top: 0, bottom: 0, width: 6 },
+  contentRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: 999,
-    paddingVertical: 11,
-    paddingLeft: 12,
-    paddingRight: 10,
-    gap: 10,
-    maxWidth: '100%',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 8,
+    paddingVertical: 12,
+    paddingLeft: 16,
+    paddingRight: 12,
+    gap: 12,
   },
   iconBubble: {
     width: ICON,
     height: ICON,
     borderRadius: ICON / 2,
-    backgroundColor: 'rgba(255,255,255,0.22)',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -121,35 +115,10 @@ const styles = StyleSheet.create({
     minWidth: 0,
     fontFamily: font.semiBold,
     fontSize: 15,
-    lineHeight: 21,
-    color: '#ffffff',
+    lineHeight: 20,
   },
-  actionPill: {
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.92)',
-    backgroundColor: 'rgba(255,255,255,0.14)',
-    paddingVertical: 6,
-    paddingHorizontal: 14,
-  },
-  actionPillPressed: {
-    backgroundColor: 'rgba(255,255,255,0.24)',
-  },
-  actionText: {
-    fontFamily: font.semiBold,
-    fontSize: 13,
-    color: '#ffffff',
-    letterSpacing: 0.2,
-  },
-  divider: {
-    width: 1,
-    height: 22,
-    backgroundColor: 'rgba(255,255,255,0.45)',
-    marginHorizontal: 2,
-  },
-  closeBtn: {
-    padding: 4,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
+  actionBtn: { paddingHorizontal: 8, paddingVertical: 6 },
+  actionText: { fontFamily: font.semiBold, fontSize: 13 },
+  closeBtn: { padding: 6 },
+  progress: { height: 3, width: '0%', alignSelf: 'stretch' },
 });

@@ -8,6 +8,7 @@ import React, {
 } from 'react';
 import * as authApi from '@/services/authApi';
 import * as pinService from '@/services/pinService';
+import * as preferencesService from '@/services/preferencesService';
 import * as sessionService from '@/services/sessionService';
 
 const AuthContext = createContext(null);
@@ -38,6 +39,18 @@ export function AuthProvider({ children }) {
         }
         const hp = await pinService.hasPin();
         setHasPin(hp);
+        // auto-unlock if last unlock is within user-configured timeout
+        try {
+          if (hp) {
+            const last = await pinService.getLastUnlockAtMs();
+            const timeout = await preferencesService.getPinUnlockTimeoutMs();
+            if (last > 0 && timeout > 0 && Date.now() - last <= timeout) {
+              setPinUnlocked(true);
+            }
+          }
+        } catch {
+          /* ignore */
+        }
       } finally {
         setPinReady(true);
         setSessionLoading(false);
@@ -66,6 +79,9 @@ export function AuthProvider({ children }) {
     await sessionService.clearSession();
     setUser(null);
     setPinUnlocked(false);
+    try {
+      await pinService.clearLastUnlockAt();
+    } catch {}
     const hp = await pinService.hasPin();
     setHasPin(hp);
   }, []);

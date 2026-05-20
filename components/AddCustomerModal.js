@@ -3,6 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { Button, Text, TextInput } from 'react-native-paper';
 import { KeyboardAwareOverlayModal } from '@/components/KeyboardAwareOverlayModal';
+import { AppConfirmDialog } from '@/components/AppConfirmDialog';
 import { font } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLocale } from '@/contexts/LocaleContext';
@@ -11,9 +12,9 @@ import { useShopData } from '@/contexts/ShopDataContext';
 import { createCustomer } from '@/services/customersService';
 import { toastSavedOnDeviceAware } from '@/services/offlineUi';
 import {
-  sanitizeAlphanumeric,
   sanitizeDigits,
   sanitizeLetters,
+  sanitizeText,
 } from '@/utils/validators';
 
 export function AddCustomerModal({ visible, onDismiss }) {
@@ -21,7 +22,7 @@ export function AddCustomerModal({ visible, onDismiss }) {
   const { t } = useLocale();
   const { showToast } = useToast();
   const { user } = useAuth();
-  const { refresh } = useShopData();
+  const { refresh, customers } = useShopData();
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [address, setAddress] = useState('');
@@ -35,13 +36,27 @@ export function AddCustomerModal({ visible, onDismiss }) {
     }
   }, [visible]);
 
+  const normalize = (value) => String(value || '').toLowerCase().trim();
+
   const close = () => {
-    if (!busy) onDismiss();
+    if (busy) return;
+    const isDirty = String(name || '').trim() || String(phone || '').trim() || String(address || '').trim();
+    if (!isDirty) return onDismiss();
+    setDiscardOpen(true);
   };
+
+  const [discardOpen, setDiscardOpen] = useState(false);
 
   const save = async () => {
     const n = name.trim();
     if (!n) return;
+    const duplicate = customers?.some(
+      (c) => normalize(c.name) === normalize(n)
+    );
+    if (duplicate) {
+      showToast({ type: 'error', message: t('ac_dupName') });
+      return;
+    }
     setBusy(true);
     try {
       const id = await createCustomer(user.ownerId, {
@@ -64,59 +79,75 @@ export function AddCustomerModal({ visible, onDismiss }) {
   };
 
   return (
-    <KeyboardAwareOverlayModal
-      visible={visible}
-      onDismiss={close}
-      dismissable={!busy}
-      renderContent={({ sheetMaxHeight }) => (
-        <ScrollView
-          keyboardShouldPersistTaps="handled"
-          bounces={false}
-          showsVerticalScrollIndicator
-          style={{ maxHeight: sheetMaxHeight }}
-          contentContainerStyle={styles.scrollContent}
-        >
-          <Text variant="titleLarge" style={styles.title}>
-            {t('nav_newCustomer')}
-          </Text>
-          <TextInput
-            mode="outlined"
-            label={t('ac_name')}
-            value={name}
-            onChangeText={(v) => setName(sanitizeLetters(v))}
-            style={styles.input}
-          />
-          <TextInput
-            mode="outlined"
-            label={t('ac_contact')}
-            value={phone}
-            onChangeText={(v) => setPhone(sanitizeDigits(v))}
-            keyboardType="phone-pad"
-            style={styles.input}
-          />
-          <TextInput
-            mode="outlined"
-            label={t('ac_address')}
-            value={address}
-            onChangeText={(v) => setAddress(sanitizeAlphanumeric(v))}
-            style={styles.input}
-          />
-          <View style={styles.actions}>
-            <Button mode="text" onPress={close} disabled={busy}>
-              {t('common_cancel')}
-            </Button>
-            <Button
-              mode="contained"
-              onPress={save}
-              loading={busy}
-              disabled={busy || !name.trim()}
-            >
-              {t('ac_save')}
-            </Button>
-          </View>
-        </ScrollView>
-      )}
-    />
+    <>
+      <KeyboardAwareOverlayModal
+        visible={visible}
+        onDismiss={close}
+        dismissable={!busy}
+        renderContent={({ sheetMaxHeight }) => (
+          <ScrollView
+            keyboardShouldPersistTaps="handled"
+            bounces={false}
+            showsVerticalScrollIndicator
+            style={{ maxHeight: sheetMaxHeight }}
+            contentContainerStyle={styles.scrollContent}
+          >
+            <Text variant="titleLarge" style={styles.title}>
+              {t('nav_newCustomer')}
+            </Text>
+            <TextInput
+              mode="outlined"
+              label={t('ac_name')}
+              value={name}
+              onChangeText={(v) => setName(sanitizeText(v))}
+              style={styles.input}
+            />
+            <TextInput
+              mode="outlined"
+              label={t('ac_contact')}
+              value={phone}
+              onChangeText={(v) => setPhone(sanitizeDigits(v))}
+              keyboardType="phone-pad"
+              style={styles.input}
+            />
+            <TextInput
+              mode="outlined"
+              label={t('ac_address')}
+              value={address}
+              onChangeText={(v) => setAddress(sanitizeText(v))}
+              style={styles.input}
+            />
+            <View style={styles.actions}>
+              <Button mode="text" onPress={close} disabled={busy}>
+                {t('common_cancel')}
+              </Button>
+              <Button
+                mode="contained"
+                onPress={save}
+                loading={busy}
+                disabled={busy || !name.trim()}
+              >
+                {t('ac_save')}
+              </Button>
+            </View>
+          </ScrollView>
+        )}
+      />
+      <AppConfirmDialog
+        visible={discardOpen}
+        title={t('tm_discardTitle')}
+        message={t('tm_discardMsg')}
+        confirmText={t('common_discard')}
+        cancelText={t('common_cancel')}
+        destructive={false}
+        useNativeModal
+        onConfirm={() => {
+          setDiscardOpen(false);
+          onDismiss();
+        }}
+        onCancel={() => setDiscardOpen(false)}
+      />
+    </>
   );
 }
 

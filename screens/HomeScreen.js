@@ -174,7 +174,7 @@ export function HomeScreen() {
     }
   }, []);
 
-  const sortKey = filterKey === 'recent' ? 'recent' : 'name';
+  const sortKey = filterKey === 'recent' ? 'recent' : 'balance';
 
   const filtered = useMemo(() => {
     const nq = normalize(q);
@@ -707,56 +707,77 @@ export function HomeScreen() {
             },
           ]}
         >
-          <Dialog.Title style={{ fontFamily: font.extraBold }}>{t('home_quickTitle')}</Dialog.Title>
+          <Dialog.Title style={{ fontFamily: font.extraBold, paddingBottom: 4 }}>{t('home_quickTitle')}</Dialog.Title>
           <Dialog.Content>
-            <Button
-              mode="text"
-              icon="account-plus-outline"
-              onPress={() => {
-                setQuickOpen(false);
-                setAddCustomerOpen(true);
-              }}
-              style={styles.quickBtn}
-            >
-              {t('home_quickNewCustomer')}
-            </Button>
-            <Button
-              mode="text"
-              icon="package-variant"
-              onPress={() => {
-                setQuickOpen(false);
-                router.push('/inventory');
-              }}
-              style={styles.quickBtn}
-            >
-              {t('home_quickInventory')}
-            </Button>
-            <Button
-              mode="text"
-              icon="chart-bar"
-              onPress={() => {
-                setQuickOpen(false);
-                router.push('/reports');
-              }}
-              style={styles.quickBtn}
-            >
-              {t('home_quickReports')}
-            </Button>
-            {lastRecentCustomer ? (
-              <Button
-                mode="text"
-                icon="account-arrow-right-outline"
+            <View style={styles.quickActions}>
+              <Pressable
+                style={({ pressed }) => [styles.quickActionRow, pressed && styles.quickActionPressed]}
                 onPress={() => {
                   setQuickOpen(false);
-                  router.push(`/customer/${lastRecentCustomer.id}`);
+                  setAddCustomerOpen(true);
                 }}
-                style={styles.quickBtn}
+                accessibilityRole="button"
               >
-                {t('home_quickLastCustomer', { name: lastRecentCustomer.name })}
-              </Button>
-            ) : null}
+                <View style={styles.quickActionIconWrap}>
+                  <MaterialCommunityIcons name="account-plus-outline" size={20} color={theme.colors.primary} />
+                </View>
+                <View style={styles.quickActionText}>
+                  <Text style={styles.quickActionLabel}>{t('home_quickNewCustomer')}</Text>
+                </View>
+              </Pressable>
+
+              <Pressable
+                style={({ pressed }) => [styles.quickActionRow, pressed && styles.quickActionPressed]}
+                onPress={() => {
+                  setQuickOpen(false);
+                  router.push('/inventory');
+                }}
+                accessibilityRole="button"
+              >
+                <View style={styles.quickActionIconWrap}>
+                  <MaterialCommunityIcons name="package-variant" size={20} color={theme.colors.primary} />
+                </View>
+                <View style={styles.quickActionText}>
+                  <Text style={styles.quickActionLabel}>{t('home_quickInventory')}</Text>
+                </View>
+              </Pressable>
+
+              <Pressable
+                style={({ pressed }) => [styles.quickActionRow, pressed && styles.quickActionPressed]}
+                onPress={() => {
+                  setQuickOpen(false);
+                  router.push('/reports');
+                }}
+                accessibilityRole="button"
+              >
+                <View style={styles.quickActionIconWrap}>
+                  <MaterialCommunityIcons name="chart-bar" size={20} color={theme.colors.primary} />
+                </View>
+                <View style={styles.quickActionText}>
+                  <Text style={styles.quickActionLabel}>{t('home_quickReports')}</Text>
+                </View>
+              </Pressable>
+
+              {lastRecentCustomer ? (
+                <Pressable
+                  style={({ pressed }) => [styles.quickActionRow, pressed && styles.quickActionPressed]}
+                  onPress={() => {
+                    setQuickOpen(false);
+                    router.push(`/customer/${lastRecentCustomer.id}`);
+                  }}
+                  accessibilityRole="button"
+                >
+                  <View style={styles.quickActionIconWrap}>
+                    <MaterialCommunityIcons name="account-arrow-right-outline" size={20} color={theme.colors.primary} />
+                  </View>
+                  <View style={styles.quickActionText}>
+                    <Text style={styles.quickActionLabel}>{t('home_quickLastCustomer', { name: lastRecentCustomer.name })}</Text>
+                  </View>
+                </Pressable>
+              ) : null}
+            </View>
           </Dialog.Content>
-          <Dialog.Actions>
+          <Dialog.Actions style={styles.quickActionsFooter}>
             <Button onPress={() => setQuickOpen(false)}>{t('home_quickClose')}</Button>
           </Dialog.Actions>
         </Dialog>
@@ -1064,6 +1085,28 @@ const styles = StyleSheet.create({
   fab: { position: 'absolute', right: 18 },
   quickDialog: { borderRadius: 16, alignSelf: 'center', width: '90%', maxWidth: 400 },
   quickBtn: { justifyContent: 'flex-start' },
+  quickActions: { paddingVertical: 6 },
+  quickActionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 10,
+    borderRadius: 12,
+    marginBottom: 8,
+  },
+  quickActionPressed: { opacity: 0.85 },
+  quickActionIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+    backgroundColor: 'rgba(45,138,78,0.06)',
+  },
+  quickActionText: { flex: 1 },
+  quickActionLabel: { fontFamily: font.semiBold, fontSize: 15, color: '#21482f' },
+  quickActionsFooter: { justifyContent: 'center', paddingBottom: 10 },
   tipsCard: {
     marginTop: 12,
     padding: 14,

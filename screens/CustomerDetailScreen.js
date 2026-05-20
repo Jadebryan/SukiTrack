@@ -17,6 +17,7 @@ import { AppConfirmDialog } from '@/components/AppConfirmDialog';
 import { CustomerDetailSkeleton } from '@/components/Skeleton';
 import { EditCustomerModal } from '@/components/EditCustomerModal';
 import { EditUtangEntryModal } from '@/components/EditUtangEntryModal';
+import ProductImage from '@/components/ProductImage';
 import { TransactionFormModal } from '@/components/TransactionFormModal';
 import { VerifyPinModal } from '@/components/VerifyPinModal';
 import { font } from '@/constants/theme';
@@ -138,23 +139,12 @@ function UtangPageItemsPaymentsTotals({
       <List.Item
         key={it.id}
         title={it.description || t('common_item')}
-        description={`${formatDateTime(it.createdAt)}${
-          it.note ? ` · ${it.note}` : ''
-        }`}
-        left={
-          thumbUri
-            ? (iconProps) => (
-                <View style={[styles.itemStickerWrap, iconProps.style]}>
-                  <Image
-                    source={{ uri: thumbUri }}
-                    style={styles.itemStickerImg}
-                    resizeMode="cover"
-                    accessibilityIgnoresInvertColors
-                  />
-                </View>
-              )
-            : undefined
-        }
+        description={`${formatDateTime(it.createdAt)}${it.note ? ` · ${it.note}` : ''}`}
+        left={(iconProps) => (
+          <View style={[styles.itemStickerWrap, iconProps.style]}>
+            <ProductImage uri={thumbUri} size={44} containerStyle={styles.itemStickerImg} />
+          </View>
+        )}
         right={() => (
           <View style={styles.rowRight}>
             <Text variant="titleSmall" style={styles.itemAmt}>

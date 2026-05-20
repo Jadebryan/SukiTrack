@@ -4,6 +4,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { Button, Chip, Text, TextInput } from 'react-native-paper';
 import { AppConfirmDialog } from '@/components/AppConfirmDialog';
 import { KeyboardAwareOverlayModal } from '@/components/KeyboardAwareOverlayModal';
+import ProductImage from '@/components/ProductImage';
 import { INVENTORY_CATEGORY_PRESET_KEYS } from '@/constants/inventoryCategories';
 import { font } from '@/constants/theme';
 import { useLocale } from '@/contexts/LocaleContext';
@@ -17,7 +18,7 @@ import {
 import { isOnline } from '@/services/networkStatus';
 import { toastSavedOnDeviceAware } from '@/services/offlineUi';
 import { formatPeso, parseAmountInput } from '@/utils/currency';
-import { sanitizeAlphanumeric, sanitizeDecimal } from '@/utils/validators';
+import { sanitizeDecimal, sanitizeText } from '@/utils/validators';
 
 function normalize(s) {
   return String(s || '')
@@ -62,11 +63,23 @@ export function InventoryProductEditorModal({
   const [deleteItem, setDeleteItem] = useState(null);
   const [pickedUri, setPickedUri] = useState(null);
   const [clearImage, setClearImage] = useState(false);
+  const [discardOpen, setDiscardOpen] = useState(false);
 
   const rows = inventory || [];
   const isEditing = Boolean(editingId);
   const showCategoryEditor =
     !lockCategoryForNewProduct || isEditing;
+
+  // Check if there are unsaved changes
+  const hasChanges = () => {
+    if (name !== initialName) return true;
+    if (pickedUri) return true;
+    if (clearImage && initialImageUri) return true;
+    if (showCategoryEditor && category !== initialCategory) return true;
+    if (!showCategoryEditor && category !== String(forcedCategoryWhenLocked || '').trim()) return true;
+    if (unitPriceStr !== initialUnitPriceStr) return true;
+    return false;
+  };
 
   const displayImageUri = useMemo(() => {
     if (clearImage) return null;
@@ -140,8 +153,12 @@ export function InventoryProductEditorModal({
 
   const close = () => {
     if (!busy) {
-      Keyboard.dismiss();
-      onDismiss();
+      if (hasChanges()) {
+        setDiscardOpen(true);
+      } else {
+        Keyboard.dismiss();
+        onDismiss();
+      }
     }
   };
 
@@ -215,6 +232,24 @@ export function InventoryProductEditorModal({
 
   return (
     <>
+      <AppConfirmDialog
+        visible={discardOpen}
+        title={t('inv_discardTitle')}
+        message={t('inv_discardMsg')}
+        confirmText={t('common_discard')}
+        cancelText={t('common_cancel')}
+        destructive
+        confirmDisabled={busy}
+        onCancel={() => {
+          setDiscardOpen(false);
+        }}
+        onConfirm={() => {
+          setDiscardOpen(false);
+          Keyboard.dismiss();
+          onDismiss();
+        }}
+      />
+
       <KeyboardAwareOverlayModal
         visible={visible}
         onDismiss={close}
@@ -234,7 +269,7 @@ export function InventoryProductEditorModal({
             mode="outlined"
             label={t('inv_fieldName')}
             value={name}
-            onChangeText={(v) => setName(sanitizeAlphanumeric(v))}
+            onChangeText={(v) => setName(sanitizeText(v))}
             style={styles.input}
             autoFocus={!editingId}
             returnKeyType="next"
@@ -259,21 +294,7 @@ export function InventoryProductEditorModal({
             {t('inv_photoSection')}
           </Text>
           <View style={styles.photoRow}>
-            {displayImageUri ? (
-              <View style={styles.photoPreviewWrap}>
-                <Image
-                  source={{ uri: displayImageUri }}
-                  style={styles.photoPreview}
-                  resizeMode="cover"
-                />
-              </View>
-            ) : (
-              <View style={[styles.photoPreviewWrap, styles.photoPlaceholder]}>
-                <Text variant="labelSmall" style={styles.photoPlaceholderText}>
-                  —
-                </Text>
-              </View>
-            )}
+            <ProductImage uri={displayImageUri} size={128} containerStyle={displayImageUri ? styles.photoPreviewWrap : [styles.photoPreviewWrap, styles.photoPlaceholder]} style={styles.photoPreview} />
             <View style={styles.photoBtns}>
               <View style={styles.photoPickerRow}>
                 <Button
@@ -330,7 +351,7 @@ export function InventoryProductEditorModal({
                 label={t('inv_category')}
                 value={category}
                 onChangeText={(v) =>
-                  setCategory(sanitizeAlphanumeric(v).slice(0, 80))
+                  setCategory(sanitizeText(v).slice(0, 80))
                 }
                 style={styles.input}
                 returnKeyType="next"
@@ -421,6 +442,7 @@ export function InventoryProductEditorModal({
         confirmText={t('common_yes')}
         cancelText={t('common_cancel')}
         destructive
+        useNativeModal
         confirmDisabled={busy}
         onCancel={() => {
           setDeleteOpen(false);
@@ -467,6 +489,25 @@ export function InventoryProductEditorModal({
               message: e?.message || t('inv_errDelete'),
             });
           }
+        }}
+      />
+
+      <AppConfirmDialog
+        visible={discardOpen}
+        title={t('inv_discardTitle')}
+        message={t('inv_discardMsg')}
+        confirmText={t('common_discard')}
+        cancelText={t('common_cancel')}
+        destructive
+        useNativeModal
+        confirmDisabled={busy}
+        onCancel={() => {
+          setDiscardOpen(false);
+        }}
+        onConfirm={() => {
+          setDiscardOpen(false);
+          Keyboard.dismiss();
+          onDismiss();
         }}
       />
     </>

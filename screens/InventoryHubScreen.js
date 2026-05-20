@@ -18,6 +18,7 @@ import { VerifyPinModal } from '@/components/VerifyPinModal';
 import { EmptyState } from '@/components/EmptyState';
 import { InventoryHubGridSkeleton } from '@/components/Skeleton';
 import { InventoryProductEditorModal } from '@/components/InventoryProductEditorModal';
+import ProductImage from '@/components/ProductImage';
 import { INVENTORY_CATEGORY_PRESET_KEYS } from '@/constants/inventoryCategories';
 import {
   getCategoryStickerVisual,
@@ -830,15 +831,9 @@ export function InventoryHubScreen() {
                     ]}
                   >
                     <View style={styles.productResultRow}>
-                      {item.imageUrl || item.imageLocalUri ? (
-                        <View style={styles.productThumbWrap}>
-                          <Image
-                            source={{ uri: item.imageUrl || item.imageLocalUri }}
-                            style={styles.productThumb}
-                            resizeMode="cover"
-                          />
-                        </View>
-                      ) : null}
+                      <View style={styles.productThumbWrap}>
+                        <ProductImage uri={item.imageUrl || item.imageLocalUri} size={56} style={styles.productThumb} />
+                      </View>
                       <View style={styles.productResultText}>
                         <Text variant="titleMedium" style={[styles.productResultName, { color: theme.colors.onSurface }]}> 
                           {item.name}

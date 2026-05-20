@@ -1,4 +1,5 @@
 import { apiFetch } from '@/services/apiClient';
+import { getDeviceHeadersAsync } from '@/services/notificationService';
 
 export async function fetchBootstrap() {
   return apiFetch('/bootstrap', { method: 'GET' });
@@ -31,9 +32,11 @@ export async function remoteUpdateCustomer(customerId, payload) {
 }
 
 export async function remoteAddPageItem(customerId, payload) {
+  const headers = await getDeviceHeadersAsync();
   return apiFetch(`/customers/${customerId}/pages/items`, {
     method: 'POST',
     body: JSON.stringify(payload),
+    headers,
   });
 }
 
