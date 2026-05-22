@@ -17,6 +17,7 @@ import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { AppThemeProvider, useAppTheme } from '@/contexts/AppThemeContext';
 import { LocaleProvider, useLocale } from '@/contexts/LocaleContext';
 import { NotificationProvider } from '@/contexts/NotificationContext';
+import { OperationQueueProvider } from '@/contexts/OperationQueueContext';
 import { ShopDataProvider } from '@/contexts/ShopDataContext';
 import {
   getHeaderScreenOptions,
@@ -134,9 +135,11 @@ export default function RootLayout() {
       <LocaleProvider>
         <AuthProvider>
           <NotificationProvider>
-            <DataShell>
-              <ThemedStack />
-            </DataShell>
+            <OperationQueueProvider>
+              <DataShell>
+                <ThemedStack />
+              </DataShell>
+            </OperationQueueProvider>
           </NotificationProvider>
         </AuthProvider>
       </LocaleProvider>

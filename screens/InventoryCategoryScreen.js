@@ -511,7 +511,7 @@ export function InventoryCategoryScreen() {
                       </Text>
                     </View>
                     <View style={styles.stickerWrap}>
-                      <ProductImage uri={item.imageUrl || item.imageLocalUri} size={44} style={styles.stickerImg} />
+                      <ProductImage uri={item.imageLocalUri || item.imageUrl} size={52} style={styles.stickerImg} />
                     </View>
                   </Card.Content>
                 </Card>

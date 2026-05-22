@@ -18,6 +18,9 @@ export const STRINGS = {
     common_discard: 'Discard',
     common_item: 'Item',
     common_payment: 'Payment',
+    common_saving: 'Saving…',
+    common_savingCount: '{count} saving…',
+    common_retry: 'Retry',
     app_name: 'SukiTrack',
 
     toast_customerAdded: 'Customer saved.',
@@ -34,6 +37,7 @@ export const STRINGS = {
     toast_productDeleted: 'Product removed.',
     toast_exportReady: 'Export ready — pick an app to share.',
     toast_emailCopied: 'Email copied to clipboard.',
+    toast_saveFailedRetry: 'Failed to save. Tap to retry.',
 
     // Navigation / headers
     nav_register: 'Create account',
@@ -696,6 +700,9 @@ export const STRINGS = {
     common_discard: 'I-discard',
     common_item: 'Item',
     common_payment: 'Bayad',
+    common_saving: 'Isinasave…',
+    common_savingCount: '{count} isinasave…',
+    common_retry: 'Subukan muli',
     app_name: 'SukiTrack',
 
     toast_customerAdded: 'Na-save ang customer.',
@@ -712,6 +719,7 @@ export const STRINGS = {
     toast_productDeleted: 'Naalis ang produkto.',
     toast_exportReady: 'Handa na ang export — pumili kung saan i-share.',
     toast_emailCopied: 'Nakopya ang email sa clipboard.',
+    toast_saveFailedRetry: 'Hindi na-save. Pindutin upang subukang muli.',
 
     nav_register: 'Bagong account',
     nav_back: 'Bumalik',

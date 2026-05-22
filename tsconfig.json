@@ -8,9 +8,10 @@
     "checkJs": false,
     "noEmit": true,
     "isolatedModules": true,
-    "baseUrl": ".",
     "paths": {
-      "@/*": ["./*"]
+      "@/*": [
+        "./*"
+      ]
     }
   },
   "include": [
@@ -19,5 +20,12 @@
     "**/*.ts",
     "**/*.tsx"
   ],
-  "exclude": ["node_modules", "dist", "build", "android", "ios"]
+  "exclude": [
+    "node_modules",
+    "dist",
+    "build",
+    "android",
+    "ios"
+  ],
+  "extends": "expo/tsconfig.base"
 }

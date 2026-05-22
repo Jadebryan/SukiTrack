@@ -7,6 +7,7 @@ import { AppConfirmDialog } from '@/components/AppConfirmDialog';
 import { font } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLocale } from '@/contexts/LocaleContext';
+import { useOperationQueue } from '@/contexts/OperationQueueContext';
 import { useToast } from '@/contexts/ToastContext';
 import { useShopData } from '@/contexts/ShopDataContext';
 import { createCustomer } from '@/services/customersService';
@@ -21,6 +22,7 @@ export function AddCustomerModal({ visible, onDismiss }) {
   const router = useRouter();
   const { t } = useLocale();
   const { showToast } = useToast();
+  const { runOperation } = useOperationQueue();
   const { user } = useAuth();
   const { refresh, customers } = useShopData();
   const [name, setName] = useState('');
@@ -58,24 +60,25 @@ export function AddCustomerModal({ visible, onDismiss }) {
       return;
     }
     setBusy(true);
-    try {
-      const id = await createCustomer(user.ownerId, {
-        name: n,
-        phone,
-        address,
-      });
-      await refresh();
-      await toastSavedOnDeviceAware(showToast, t, 'toast_customerAdded');
-      onDismiss();
-      router.push(`/customer/${id}`);
-    } catch (e) {
-      showToast({
-        type: 'error',
-        message: e?.message || t('ac_errSave'),
-      });
-    } finally {
-      setBusy(false);
-    }
+    onDismiss();
+    void runOperation({
+      label: t('nav_newCustomer'),
+      task: async () => {
+        const id = await createCustomer(user.ownerId, {
+          name: n,
+          phone,
+          address,
+        });
+        await refresh();
+        await toastSavedOnDeviceAware(showToast, t, 'toast_customerAdded');
+        return id;
+      },
+      onSuccess: async (id) => {
+        router.push(`/customer/${id}`);
+      },
+      toastErrorMessage: t('ac_errSave'),
+      retryLabel: t('common_retry'),
+    });
   };
 
   return (

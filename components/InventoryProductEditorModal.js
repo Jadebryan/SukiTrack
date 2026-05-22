@@ -8,6 +8,7 @@ import ProductImage from '@/components/ProductImage';
 import { INVENTORY_CATEGORY_PRESET_KEYS } from '@/constants/inventoryCategories';
 import { font } from '@/constants/theme';
 import { useLocale } from '@/contexts/LocaleContext';
+import { useOperationQueue } from '@/contexts/OperationQueueContext';
 import { useToast } from '@/contexts/ToastContext';
 import { useShopData } from '@/contexts/ShopDataContext';
 import {
@@ -52,6 +53,7 @@ export function InventoryProductEditorModal({
 }) {
   const { t } = useLocale();
   const { showToast } = useToast();
+  const { runOperation } = useOperationQueue();
   const { inventory, refresh } = useShopData();
   const categoryInputRef = useRef(null);
   const priceInputRef = useRef(null);
@@ -194,35 +196,35 @@ export function InventoryProductEditorModal({
     if (clearImage && isEditing) imagePayload.clearProductImage = true;
 
     setBusy(true);
-    try {
-      if (editingId) {
-        await updateInventoryItem(editingId, {
-          name: n,
-          unitPrice,
-          category: cat,
-          ...imagePayload,
-        });
-      } else {
-        await createInventoryItem({
-          name: n,
-          unitPrice,
-          category: cat,
-          ...imagePayload,
-        });
-      }
-      await refresh();
-      Keyboard.dismiss();
-      onDismiss();
-      await toastSavedOnDeviceAware(showToast, t, 'toast_productSaved');
-      if (onSaved) await onSaved();
-    } catch (e) {
-      showToast({
-        type: 'error',
-        message: e?.message || t('inv_errSave'),
-      });
-    } finally {
-      setBusy(false);
-    }
+    onDismiss();
+    void runOperation({
+      label: editingId ? t('inv_editTitle') : t('inv_addTitle'),
+      task: async () => {
+        if (editingId) {
+          await updateInventoryItem(editingId, {
+            name: n,
+            unitPrice,
+            category: cat,
+            ...imagePayload,
+          });
+        } else {
+          await createInventoryItem({
+            name: n,
+            unitPrice,
+            category: cat,
+            ...imagePayload,
+          });
+        }
+        await refresh();
+      },
+      onSuccess: async () => {
+        Keyboard.dismiss();
+        await toastSavedOnDeviceAware(showToast, t, 'toast_productSaved');
+        if (onSaved) await onSaved();
+      },
+      toastErrorMessage: t('inv_errSave'),
+      retryLabel: t('common_retry'),
+    });
   };
 
   const confirmDelete = (item) => {

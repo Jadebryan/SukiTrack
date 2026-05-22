@@ -6,6 +6,7 @@ import { AppConfirmDialog } from '@/components/AppConfirmDialog';
 import { font } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLocale } from '@/contexts/LocaleContext';
+import { useOperationQueue } from '@/contexts/OperationQueueContext';
 import { useToast } from '@/contexts/ToastContext';
 import { useShopData } from '@/contexts/ShopDataContext';
 import { updateCustomer } from '@/services/customersService';
@@ -25,6 +26,7 @@ import {
 export function EditCustomerModal({ visible, onDismiss, customer }) {
   const { t } = useLocale();
   const { showToast } = useToast();
+  const { runOperation } = useOperationQueue();
   const { user } = useAuth();
   const { refresh, customers } = useShopData();
   const [name, setName] = useState('');
@@ -64,23 +66,21 @@ export function EditCustomerModal({ visible, onDismiss, customer }) {
       return;
     }
     setBusy(true);
-    try {
-      await updateCustomer(user.ownerId, customer.id, {
-        name: n,
-        phone,
-        address,
-      });
-      await refresh();
-      await toastSavedOnDeviceAware(showToast, t, 'toast_customerUpdated');
-      onDismiss();
-    } catch (e) {
-      showToast({
-        type: 'error',
-        message: e?.message || t('cd_updateErr'),
-      });
-    } finally {
-      setBusy(false);
-    }
+    onDismiss();
+    void runOperation({
+      label: t('common_customer'),
+      task: async () => {
+        await updateCustomer(user.ownerId, customer.id, {
+          name: n,
+          phone,
+          address,
+        });
+        await refresh();
+        await toastSavedOnDeviceAware(showToast, t, 'toast_customerUpdated');
+      },
+      toastErrorMessage: t('cd_updateErr'),
+      retryLabel: t('common_retry'),
+    });
   };
 
   return (

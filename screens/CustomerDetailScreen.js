@@ -23,6 +23,7 @@ import { VerifyPinModal } from '@/components/VerifyPinModal';
 import { font } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLocale } from '@/contexts/LocaleContext';
+import { useOperationQueue } from '@/contexts/OperationQueueContext';
 import { useToast } from '@/contexts/ToastContext';
 import { useShopData } from '@/contexts/ShopDataContext';
 import { useCustomer } from '@/hooks/useCustomer';
@@ -283,6 +284,7 @@ export function CustomerDetailScreen() {
   const router = useRouter();
   const { t, locale } = useLocale();
   const { showToast } = useToast();
+  const { runOperation } = useOperationQueue();
   const theme = useTheme();
   const { user } = useAuth();
   const { refresh, inventory } = useShopData();
@@ -421,25 +423,33 @@ export function CustomerDetailScreen() {
       return;
     }
     setSaving(true);
-    try {
-      if (payload.type === 'utang') {
-        if (Array.isArray(payload.items)) {
-          for (const item of payload.items) {
+    setModalOpen(false);
+    setSaving(false);
+
+    void runOperation({
+      label: t('common_saving'),
+      task: async () => {
+        if (payload.type === 'utang') {
+          if (Array.isArray(payload.items)) {
+            for (const item of payload.items) {
+              await addPageItem(user.ownerId, customerId, {
+                amount: item.amount,
+                description: item.description || t('common_item'),
+                note: '',
+              });
+            }
+          } else {
             await addPageItem(user.ownerId, customerId, {
-              amount: item.amount,
-              description: item.description || t('common_item'),
+              amount: payload.amount,
+              description:
+                (payload.note && String(payload.note).trim()) || t('common_item'),
               note: '',
             });
           }
-        } else {
-          await addPageItem(user.ownerId, customerId, {
-            amount: payload.amount,
-            description:
-              (payload.note && String(payload.note).trim()) || t('common_item'),
-            note: '',
-          });
+          await refresh();
+          return;
         }
-      } else {
+
         const prevDue =
           openPage != null ? Math.max(0, Number(openPage.due) || 0) : 0;
         const paidAmt = payload.amount;
@@ -448,7 +458,6 @@ export function CustomerDetailScreen() {
           note: payload.note ? String(payload.note).trim() : '',
         });
         await refresh();
-        setModalOpen(false);
         const online = await isOnline();
         if (!online) {
           await toastSavedOnDeviceAware(showToast, t, 'toast_txPaymentAdded');
@@ -462,25 +471,18 @@ export function CustomerDetailScreen() {
               remaining: formatPeso(stillDue),
             }),
           });
-        } else {
-          showToast({
-            type: 'success',
-            message: t('toast_txPaymentAdded'),
-          });
+          return;
         }
-        return;
-      }
-      await refresh();
-      setModalOpen(false);
-      await toastSavedOnDeviceAware(showToast, t, 'toast_txUtangAdded');
-    } catch (e) {
-      showToast({
-        type: 'error',
-        message: e?.message || t('cd_saveErr'),
-      });
-    } finally {
-      setSaving(false);
-    }
+        showToast({ type: 'success', message: t('toast_txPaymentAdded') });
+      },
+      onSuccess: async () => {
+        if (payload.type === 'utang') {
+          await toastSavedOnDeviceAware(showToast, t, 'toast_txUtangAdded');
+        }
+      },
+      toastErrorMessage: t('cd_saveErr'),
+      retryLabel: t('common_retry'),
+    });
   };
 
   const openEdit = (kind, row) => {
@@ -766,37 +768,39 @@ export function CustomerDetailScreen() {
         kind={editKind}
         initial={editInitial || { id: '', amount: 0, description: '', note: '' }}
         busy={saving}
-        onSave={async (payload) => {
+        onSave={(payload) => {
           if (!user?.ownerId || !customerId || !editInitial?.id) return;
           setSaving(true);
-          try {
-            if (editKind === 'item') {
-              await updatePageItem(user.ownerId, customerId, editInitial.id, {
-                amount: payload.amount,
-                description: payload.description,
-                note: payload.note,
-              });
-            } else {
-              await updatePagePayment(user.ownerId, customerId, editInitial.id, {
-                amount: payload.amount,
-                note: payload.note,
-              });
-            }
-            await refresh();
-            await toastSavedOnDeviceAware(
-              showToast,
-              t,
-              editKind === 'item' ? 'toast_txItemUpdated' : 'toast_txPaymentUpdated'
-            );
-            setEditEntryOpen(false);
-          } catch (e) {
-            showToast({
-              type: 'error',
-              message: e?.message || t('cd_saveErr'),
-            });
-          } finally {
-            setSaving(false);
-          }
+          setEditEntryOpen(false);
+          setSaving(false);
+
+          void runOperation({
+            label: editKind === 'item' ? t('common_item') : t('common_payment'),
+            task: async () => {
+              if (editKind === 'item') {
+                await updatePageItem(user.ownerId, customerId, editInitial.id, {
+                  amount: payload.amount,
+                  description: payload.description,
+                  note: payload.note,
+                });
+              } else {
+                await updatePagePayment(user.ownerId, customerId, editInitial.id, {
+                  amount: payload.amount,
+                  note: payload.note,
+                });
+              }
+              await refresh();
+            },
+            onSuccess: async () => {
+              await toastSavedOnDeviceAware(
+                showToast,
+                t,
+                editKind === 'item' ? 'toast_txItemUpdated' : 'toast_txPaymentUpdated'
+              );
+            },
+            toastErrorMessage: t('cd_saveErr'),
+            retryLabel: t('common_retry'),
+          });
         }}
       />
 
