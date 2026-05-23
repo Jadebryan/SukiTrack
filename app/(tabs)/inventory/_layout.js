@@ -30,6 +30,7 @@ export default function InventoryLayout() {
         name="[slug]"
         options={{
           title: t('tab_inventory'),
+          headerShown: false,
         }}
       />
     </Stack>

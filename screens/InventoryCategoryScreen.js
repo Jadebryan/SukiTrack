@@ -1,55 +1,59 @@
-import { useLocalSearchParams, useNavigation } from 'expo-router';
-import React, { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import React, { useCallback, useDeferredValue, useMemo, useRef, useState } from 'react';
 import {
   FlatList,
-  Image,
   KeyboardAvoidingView,
   Platform,
-  Pressable,
   RefreshControl,
+  StatusBar,
   StyleSheet,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Button, Card, Chip, Dialog, FAB, IconButton, Portal, Searchbar, Text, TextInput, useTheme } from 'react-native-paper';
+import { Button, Chip, Dialog, IconButton, Portal, Text, TextInput, useTheme } from 'react-native-paper';
 import { AppConfirmDialog } from '@/components/AppConfirmDialog';
 import { EmptyState } from '@/components/EmptyState';
+import { InventoryCategoryListHeader } from '@/components/inventory/InventoryCategoryListHeader';
+import InventoryCategoryProductRow from '@/components/inventory/InventoryCategoryProductRow';
 import { InventoryProductEditorModal } from '@/components/InventoryProductEditorModal';
-import ProductImage from '@/components/ProductImage';
 import { InventoryProductListSkeleton } from '@/components/Skeleton';
 import { VerifyPinModal } from '@/components/VerifyPinModal';
 import { getTabBarOuterHeight } from '@/constants/tabBar';
 import { INVENTORY_CATEGORY_PRESET_KEYS } from '@/constants/inventoryCategories';
+import { getInventoryCategoryPalette } from '@/constants/inventoryCategoryPalette';
 import { font } from '@/constants/theme';
+import { useAppTheme } from '@/contexts/AppThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLocale } from '@/contexts/LocaleContext';
 import { useToast } from '@/contexts/ToastContext';
-import { useShopData } from '@/contexts/ShopDataContext';
+import { useInventoryShopData } from '@/hooks/useShopInventory';
 import { isOnline } from '@/services/networkStatus';
 import * as pinService from '@/services/pinService';
 import { updateInventoryItem } from '@/services/inventoryService';
-import { formatPeso } from '@/utils/currency';
 import { itemMatchesCategorySlug, slugToCategory } from '@/utils/categoryRoute';
+import { safeRouterBack } from '@/utils/safeRouterBack';
 
 function normalize(s) {
   return String(s || '').toLowerCase().trim();
 }
 
-function hasPrice(it) {
-  return it.unitPrice != null && Number.isFinite(Number(it.unitPrice));
-}
+const LIST_PAD = 16;
+const LIST_BOTTOM_PAD = 24;
 
 export function InventoryCategoryScreen() {
   const { slug: slugParam } = useLocalSearchParams();
-  const navigation = useNavigation();
+  const router = useRouter();
   const { t } = useLocale();
   const { user } = useAuth();
   const { showToast } = useToast();
   const theme = useTheme();
+  const { isDark } = useAppTheme();
+  const colors = useMemo(() => getInventoryCategoryPalette(isDark), [isDark]);
   const insets = useSafeAreaInsets();
-  const { inventory, refresh, loading, error } = useShopData();
+  const { inventory, refresh, loading, error } = useInventoryShopData();
   const [refreshing, setRefreshing] = useState(false);
   const [q, setQ] = useState('');
+  const deferredQ = useDeferredValue(q);
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [initialName, setInitialName] = useState('');
@@ -80,7 +84,7 @@ export function InventoryCategoryScreen() {
   );
 
   const rows = useMemo(() => inventory || [], [inventory]);
-  const nq = useMemo(() => normalize(q), [q]);
+  const nq = useMemo(() => normalize(deferredQ), [deferredQ]);
 
   const filtered = useMemo(() => {
     const list = rows.filter((it) => itemMatchesCategorySlug(it, slug, t));
@@ -287,61 +291,11 @@ export function InventoryCategoryScreen() {
   }, [rows, selectedIds]);
 
   const bulkActionBusy = bulkUncatBusy || bulkMoveBusy;
-
-  useLayoutEffect(() => {
-    const showBulk =
-      Boolean(user?.ownerId) && Boolean(categoryStored.trim()) && filtered.length > 0;
-    navigation.setOptions({
-      headerTitle: () => (
-        <View style={{ alignItems: 'center', justifyContent: 'center', maxWidth: 260 }}>
-          <Text
-            style={{
-              fontFamily: font.extraBold,
-              fontSize: 17,
-              color: theme.colors.onSurface,
-            }}
-            numberOfLines={1}
-          >
-            {headerTitle}
-          </Text>
-          <Text
-            variant="labelSmall"
-            style={{ color: theme.colors.onSurfaceVariant, marginTop: 2 }}
-            numberOfLines={1}
-          >
-            {t('tab_inventory')} · {headerTitle}
-          </Text>
-        </View>
-      ),
-      headerRight: showBulk
-        ? () => (
-            <Button
-              mode="text"
-              compact
-              disabled={bulkUncatBusy}
-              onPress={openBulkUncatFlow}
-              style={{ marginRight: 4 }}
-              accessibilityLabel={t('inv_bulkUncatHeader')}
-            >
-              {t('inv_bulkUncatHeader')}
-            </Button>
-          )
-        : undefined,
-    });
-  }, [
-    navigation,
-    headerTitle,
-    categoryStored,
-    filtered.length,
-    user?.ownerId,
-    bulkUncatBusy,
-    t,
-    openBulkUncatFlow,
-    theme.colors.onSurface,
-    theme.colors.onSurfaceVariant,
-  ]);
-
   const fabBottom = getTabBarOuterHeight(insets.bottom) + 12;
+  const showUncategorizeAll =
+    Boolean(user?.ownerId) && Boolean(categoryStored.trim()) && filtered.length > 0;
+  const showSelectButton =
+    Boolean(categoryStored.trim()) && filtered.length > 0;
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -353,16 +307,16 @@ export function InventoryCategoryScreen() {
     }
   };
 
-  const openCreate = () => {
+  const openCreate = useCallback(() => {
     setEditingId(null);
     setInitialName('');
     setInitialCategory('');
     setInitialUnitPriceStr('');
     setInitialImageUri(null);
     setEditorOpen(true);
-  };
+  }, []);
 
-  const openEdit = (item) => {
+  const openEdit = useCallback((item) => {
     setEditingId(item.id);
     setInitialName(item.name || '');
     setInitialCategory(String(item.category || '').trim());
@@ -373,12 +327,20 @@ export function InventoryCategoryScreen() {
     );
     setInitialImageUri(item.imageUrl || item.imageLocalUri || null);
     setEditorOpen(true);
-  };
+  }, []);
 
   const closeEditor = () => {
     setEditorOpen(false);
     setEditingId(null);
   };
+
+  const handleToggleSelectMode = useCallback(() => {
+    if (selectionMode) {
+      resetSelection();
+    } else {
+      openBulkSelectMode();
+    }
+  }, [selectionMode, resetSelection, openBulkSelectMode]);
 
   const listEmpty =
     loading && rows.length === 0 ? (
@@ -399,11 +361,81 @@ export function InventoryCategoryScreen() {
   const bulkSnapshot = pendingBulkSnapshotRef.current;
   const bulkCount = bulkSnapshot.length;
   const bulkCategoryLabel = categoryStored.trim() || t('inv_filterUncat');
+  const listBottomPad = selectionMode ? fabBottom + 100 : fabBottom + LIST_BOTTOM_PAD;
+
+  const renderItem = useCallback(
+    ({ item }) => {
+      const selected = selectedIds.includes(item.id);
+      return (
+        <InventoryCategoryProductRow
+          item={item}
+          colors={colors}
+          selectionMode={selectionMode}
+          selected={selected}
+          onPress={() => {
+            if (selectionMode) {
+              toggleRowSelection(item.id);
+              return;
+            }
+            openEdit(item);
+          }}
+          onToggleSelect={() => toggleRowSelection(item.id)}
+          onLongPress={() => {
+            if (!selectionMode) {
+              setSelectionMode(true);
+              setSelectedIds([item.id]);
+            }
+          }}
+        />
+      );
+    },
+    [colors, selectionMode, selectedIds, toggleRowSelection, openEdit]
+  );
+
+  const listHeader = useMemo(
+    () => (
+      <InventoryCategoryListHeader
+        colors={colors}
+        t={t}
+        error={error}
+        title={headerTitle}
+        q={q}
+        onChangeQuery={setQ}
+        onBack={() => safeRouterBack(router, '/inventory')}
+        showUncategorizeAll={showUncategorizeAll}
+        onUncategorizeAll={openBulkUncatFlow}
+        uncategorizeDisabled={bulkUncatBusy}
+        selectionMode={selectionMode}
+        selectedCount={selectedCount}
+        showSelectButton={showSelectButton}
+        onToggleSelectMode={handleToggleSelectMode}
+        onAddProduct={openCreate}
+        showAddButton={!selectionMode}
+      />
+    ),
+    [
+      colors,
+      t,
+      error,
+      headerTitle,
+      q,
+      showUncategorizeAll,
+      openBulkUncatFlow,
+      bulkUncatBusy,
+      selectionMode,
+      selectedCount,
+      showSelectButton,
+      handleToggleSelectMode,
+      openCreate,
+      router,
+    ]
+  );
 
   return (
     <>
+      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
       <KeyboardAvoidingView
-        style={styles.flex}
+        style={[styles.flex, { backgroundColor: colors.bg }]}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <FlatList
@@ -414,123 +446,30 @@ export function InventoryCategoryScreen() {
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
           }
           ListHeaderComponent={
-            <View style={styles.header}>
-              {error ? (
-                <Text variant="bodySmall" style={styles.errBanner}>
-                  {error?.message || t('common_error')}
-                </Text>
-              ) : null}
-              <Searchbar
-                placeholder={t('inv_searchPlaceholder')}
-                value={q}
-                onChangeText={setQ}
-                style={[
-                  styles.search,
-                  {
-                    backgroundColor: theme.colors.surface,
-                    borderColor: theme.colors.outlineVariant || theme.colors.outline,
-                  },
-                ]}
-                inputStyle={{ color: theme.colors.onSurface }}
-                elevation={0}
-              />
-              <Text variant="bodySmall" style={styles.hint}>
-                {selectionMode
-                  ? t('inv_catBulkSelectedHint', { count: selectedCount })
-                  : t('inv_catScreenHint')}
-              </Text>
-              {!selectionMode && Boolean(categoryStored.trim()) && filtered.length > 0 ? (
-                <Button
-                  mode="outlined"
-                  compact
-                  onPress={openBulkSelectMode}
-                  style={styles.bulkSelectBtn}
-                >
-                  {t('inv_bulkSelect')}
-                </Button>
-              ) : null}
-            </View>
+            <View style={{ paddingTop: insets.top }}>{listHeader}</View>
           }
           contentContainerStyle={[
             styles.content,
-            { paddingBottom: fabBottom + 72 },
+            { paddingHorizontal: LIST_PAD, paddingBottom: listBottomPad },
           ]}
           ListEmptyComponent={listEmpty}
-          renderItem={({ item }) => {
-            const selected = selectedIds.includes(item.id);
-            return (
-              <Pressable
-                onPress={() => {
-                  if (selectionMode) {
-                    toggleRowSelection(item.id);
-                    return;
-                  }
-                  openEdit(item);
-                }}
-                onLongPress={() => {
-                  if (!selectionMode) {
-                    setSelectionMode(true);
-                    setSelectedIds([item.id]);
-                  }
-                }}
-                style={[styles.cardPress, selected && styles.cardPressSelected]}
-                accessibilityLabel={t('inv_editA11y')}
-              >
-                <Card mode="elevated" style={[styles.card, selected && styles.cardSelected]}>
-                  <Card.Content
-                    style={[
-                      styles.cardContent,
-                      selectionMode && styles.cardContentSelect,
-                    ]}
-                  >
-                    {selectionMode ? (
-                      <IconButton
-                        icon={selected ? 'checkbox-marked' : 'checkbox-blank-outline'}
-                        size={24}
-                        onPress={() => toggleRowSelection(item.id)}
-                        style={styles.selectionIcon}
-                        containerColor="transparent"
-                        iconColor={selected ? theme.colors.primary : theme.colors.onSurfaceVariant}
-                        accessibilityLabel={
-                          selected
-                            ? t('common_deselect')
-                            : t('common_select')
-                        }
-                      />
-                    ) : null}
-                    <View style={styles.cardMain}>
-                      <Text variant="titleMedium" style={styles.rowName}>
-                        {item.name}
-                      </Text>
-                      <Text variant="bodySmall" style={styles.rowSub}>
-                        {hasPrice(item)
-                          ? t('inv_defaultPrice', {
-                              price: formatPeso(item.unitPrice),
-                            })
-                          : t('inv_noDefaultPrice')}
-                      </Text>
-                    </View>
-                    <View style={styles.stickerWrap}>
-                      <ProductImage uri={item.imageLocalUri || item.imageUrl} size={52} style={styles.stickerImg} />
-                    </View>
-                  </Card.Content>
-                </Card>
-              </Pressable>
-            );
-          }}
+          renderItem={renderItem}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
         />
+
         {selectionMode ? (
           <View
             style={[
               styles.bulkSelectionBar,
               {
                 bottom: fabBottom,
-                borderColor: theme.colors.outlineVariant,
-                backgroundColor: theme.colors.surface,
+                borderColor: colors.border,
+                backgroundColor: colors.surface,
               },
             ]}
           >
-            <Text style={[styles.selectionLabel, { color: theme.colors.onSurface }]}> 
+            <Text style={[styles.selectionLabel, { color: colors.text }]}>
               {t('inv_bulkSelectedCount', { count: selectedCount })}
             </Text>
             <View style={styles.selectionActions}>
@@ -559,14 +498,7 @@ export function InventoryCategoryScreen() {
               />
             </View>
           </View>
-        ) : (
-          <FAB
-            icon="plus"
-            style={[styles.fab, { bottom: fabBottom }]}
-            onPress={openCreate}
-            label={t('inv_add')}
-          />
-        )}
+        ) : null}
 
         <InventoryProductEditorModal
           visible={editorOpen}
@@ -589,7 +521,7 @@ export function InventoryCategoryScreen() {
         >
           <Dialog.Title>{t('inv_bulkMoveTitle')}</Dialog.Title>
           <Dialog.Content>
-            <Text style={[styles.moveDialogMsg, { color: theme.colors.onSurfaceVariant }]}> 
+            <Text style={[styles.moveDialogMsg, { color: theme.colors.onSurfaceVariant }]}>
               {t('inv_bulkMoveHint', {
                 count: selectedCount,
                 category: bulkCategoryLabel,
@@ -619,9 +551,7 @@ export function InventoryCategoryScreen() {
             </View>
           </Dialog.Content>
           <Dialog.Actions style={styles.dialogActions}>
-            <Button onPress={() => setMoveDialogOpen(false)}>
-              {t('common_cancel')}
-            </Button>
+            <Button onPress={() => setMoveDialogOpen(false)}>{t('common_cancel')}</Button>
             <Button
               mode="contained"
               onPress={async () => {
@@ -651,6 +581,7 @@ export function InventoryCategoryScreen() {
         cancelText={t('common_cancel')}
         destructive
         confirmDisabled={bulkActionBusy}
+        confirmLoading={bulkActionBusy}
         onCancel={() => {
           if (!bulkActionBusy) {
             setBulkUncatConfirmOpen(false);
@@ -695,48 +626,13 @@ export function InventoryCategoryScreen() {
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   listFlex: { flex: 1 },
-  header: {
-    paddingHorizontal: 16,
-    paddingTop: 8,
-    paddingBottom: 4,
-  },
-  search: {
-    marginBottom: 10,
-    borderWidth: 1,
-  },
-  hint: {
-    opacity: 0.75,
-    marginBottom: 8,
-    lineHeight: 20,
-  },
-  bulkHint: { opacity: 0.85, lineHeight: 18, marginBottom: 4 },
-  errBanner: { color: '#C62828', marginBottom: 8 },
   content: { flexGrow: 1 },
-  centerPad: { textAlign: 'center', padding: 24 },
   emptyWrap: { flex: 1, justifyContent: 'center', minHeight: 280 },
-  cardPress: { paddingHorizontal: 16, marginBottom: 10 },
-  cardPressSelected: { opacity: 0.95 },
-  card: { borderRadius: 14 },
-  cardContent: { flexDirection: 'row', alignItems: 'center' },
-  cardContentSelect: { gap: 8 },
-  cardMain: { flex: 1, minWidth: 0 },
-  rowName: { fontFamily: font.extraBold },
-  rowSub: { marginTop: 4, opacity: 0.75 },
-  stickerWrap: {
-    marginLeft: 12,
-    borderRadius: 12,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: 'rgba(45,138,78,0.25)',
-    backgroundColor: '#f4f7f5',
-  },
-  stickerImg: { width: 52, height: 52 },
-  bulkSelectBtn: { alignSelf: 'flex-start', marginTop: 8 },
   bulkSelectionBar: {
     position: 'absolute',
     left: 16,
     right: 16,
-    borderTopWidth: 1,
+    borderWidth: StyleSheet.hairlineWidth,
     borderRadius: 18,
     padding: 12,
   },
@@ -747,14 +643,11 @@ const styles = StyleSheet.create({
     gap: 8,
     flexWrap: 'wrap',
   },
-  selectionIcon: { margin: 0, marginRight: -4 },
   dialog: { alignSelf: 'center', width: '92%', maxWidth: 420 },
   dialogActions: { paddingHorizontal: 16 },
   moveDialogMsg: { lineHeight: 20, marginBottom: 12 },
-  cardSelected: { borderColor: '#2d8a4e', borderWidth: 1 },
   input: { marginBottom: 10 },
   modalSectionLabel: { marginTop: 12, marginBottom: 6 },
   modalPresetRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   modalPresetChip: { marginBottom: 8 },
-  fab: { position: 'absolute', right: 16 },
 });

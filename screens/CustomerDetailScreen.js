@@ -1,29 +1,28 @@
-import { useFocusEffect, useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
-import React, { useCallback, useLayoutEffect, useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, View, Image } from 'react-native';
-import {
-  Appbar,
-  Button,
-  Card,
-  Divider,
-  IconButton,
-  List,
-  Menu,
-  Text,
-  useTheme,
-} from 'react-native-paper';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import React, { useCallback, useMemo, useState } from 'react';
+import { ScrollView, StatusBar, StyleSheet, View, Pressable, Text } from 'react-native';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTheme } from 'react-native-paper';
 import { AppChoiceDialog } from '@/components/AppChoiceDialog';
 import { AppConfirmDialog } from '@/components/AppConfirmDialog';
+import { CustomerDetailActionRow } from '@/components/customer/CustomerDetailActionRow';
+import { CustomerDetailBalanceCard } from '@/components/customer/CustomerDetailBalanceCard';
+import { CustomerDetailHeader } from '@/components/customer/CustomerDetailHeader';
+import { CustomerDetailProfileCard } from '@/components/customer/CustomerDetailProfileCard';
+import { CustomerUtangPageBlock } from '@/components/customer/CustomerUtangPageBlock';
+import { HomeSectionHeader } from '@/components/home/HomeSectionHeader';
 import { CustomerDetailSkeleton } from '@/components/Skeleton';
 import { EditCustomerModal } from '@/components/EditCustomerModal';
 import { EditUtangEntryModal } from '@/components/EditUtangEntryModal';
-import ProductImage from '@/components/ProductImage';
 import { TransactionFormModal } from '@/components/TransactionFormModal';
 import { VerifyPinModal } from '@/components/VerifyPinModal';
+import { getCustomerDetailPalette } from '@/constants/customerDetailPalette';
 import { font } from '@/constants/theme';
+import { useAppTheme } from '@/contexts/AppThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLocale } from '@/contexts/LocaleContext';
-import { useOperationQueue } from '@/contexts/OperationQueueContext';
+import { useSaveOperation } from '@/hooks/useSaveOperation';
 import { useToast } from '@/contexts/ToastContext';
 import { useShopData } from '@/contexts/ShopDataContext';
 import { useCustomer } from '@/hooks/useCustomer';
@@ -44,6 +43,7 @@ import {
 } from '@/services/pagesService';
 import { printUtangPageReceipt } from '@/services/receiptService';
 import { formatPeso } from '@/utils/currency';
+import { safeRouterBack } from '@/utils/safeRouterBack';
 import { formatDateTime } from '@/utils/date';
 
 function cloneClearUndoSnapshot(rawPages) {
@@ -91,8 +91,6 @@ async function replayClearUndoSnapshot(ownerId, customerId, snapshot, itemFallba
   }
 }
 
-const UTANG_LIST_NESTED_SCROLL_THRESHOLD = 8;
-const UTANG_LIST_NESTED_MAX_HEIGHT = 300;
 const CLEAR_UNDO_MAX_LINES = 400;
 
 function countClearUndoLines(snapshot) {
@@ -102,190 +100,17 @@ function countClearUndoLines(snapshot) {
   );
 }
 
-function UtangPageItemsPaymentsTotals({
-  page,
-  t,
-  styles,
-  inventory = [],
-  onEditItem,
-  onDeleteItem,
-  onEditPayment,
-  onDeletePayment,
-}) {
-  const imageByDesc = useMemo(() => {
-    const m = new Map();
-    for (const row of inventory || []) {
-      const key = String(row.name || '')
-        .toLowerCase()
-        .trim();
-      if (!key) continue;
-      const uri = row.imageUrl || row.imageLocalUri;
-      if (uri) m.set(key, uri);
-    }
-    return m;
-  }, [inventory]);
-
-  const items = page.items || [];
-  const payments = page.payments || [];
-  const itemsLong = items.length > UTANG_LIST_NESTED_SCROLL_THRESHOLD;
-  const paysLong = payments.length > UTANG_LIST_NESTED_SCROLL_THRESHOLD;
-  const showLongHint = itemsLong || paysLong;
-
-  const itemNodes = items.map((it) => {
-    const descKey = String(it.description || '')
-      .toLowerCase()
-      .trim();
-    const thumbUri = descKey ? imageByDesc.get(descKey) : null;
-    return (
-      <List.Item
-        key={it.id}
-        title={it.description || t('common_item')}
-        description={`${formatDateTime(it.createdAt)}${it.note ? ` · ${it.note}` : ''}`}
-        left={(iconProps) => (
-          <View style={[styles.itemStickerWrap, iconProps.style]}>
-            <ProductImage uri={thumbUri} size={44} containerStyle={styles.itemStickerImg} />
-          </View>
-        )}
-        right={() => (
-          <View style={styles.rowRight}>
-            <Text variant="titleSmall" style={styles.itemAmt}>
-              {formatPeso(it.amount)}
-            </Text>
-            <IconButton
-              icon="pencil-outline"
-              size={22}
-              style={styles.rowIconBtn}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              accessibilityLabel={t('cd_a11yEditLine')}
-              onPress={() => onEditItem?.(it)}
-            />
-            <IconButton
-              icon="trash-can-outline"
-              size={22}
-              style={styles.rowIconBtn}
-              iconColor="#ef4444"
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              accessibilityLabel={t('cd_a11yDeleteLine')}
-              onPress={() => onDeleteItem?.(it)}
-            />
-          </View>
-        )}
-      />
-    );
-  });
-
-  const paymentNodes = payments.map((p) => (
-    <List.Item
-      key={p.id}
-      title={
-        p.note ? t('cd_payWithNote', { note: p.note }) : t('cd_payLine')
-      }
-      description={formatDateTime(p.createdAt)}
-      left={(props) => <List.Icon {...props} icon="cash-check" />}
-      right={() => (
-        <View style={styles.rowRight}>
-          <Text variant="titleSmall" style={styles.itemAmt}>
-            {formatPeso(p.amount)}
-          </Text>
-          <IconButton
-            icon="pencil-outline"
-            size={22}
-            style={styles.rowIconBtn}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            accessibilityLabel={t('cd_a11yEditLine')}
-            onPress={() => onEditPayment?.(p)}
-          />
-          <IconButton
-            icon="trash-can-outline"
-            size={22}
-            style={styles.rowIconBtn}
-            iconColor="#ef4444"
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            accessibilityLabel={t('cd_a11yDeleteLine')}
-            onPress={() => onDeletePayment?.(p)}
-          />
-        </View>
-      )}
-    />
-  ));
-
-  return (
-    <>
-      {showLongHint ? (
-        <Text variant="bodySmall" style={styles.longSheetHint}>
-          {t('cd_longSheetScrollHint')}
-        </Text>
-      ) : null}
-
-      <Text variant="labelLarge" style={styles.blockLabel}>
-        {t('cd_items')}
-      </Text>
-      {items.length === 0 ? (
-        <Text style={styles.muted}>{t('cd_noItemsYet')}</Text>
-      ) : itemsLong ? (
-        <ScrollView
-          nestedScrollEnabled
-          keyboardShouldPersistTaps="handled"
-          style={[styles.utangScrollBox, { maxHeight: UTANG_LIST_NESTED_MAX_HEIGHT }]}
-        >
-          {itemNodes}
-        </ScrollView>
-      ) : (
-        itemNodes
-      )}
-
-      <Divider style={styles.div} />
-
-      <Text variant="labelLarge" style={styles.blockLabel}>
-        {t('cd_payments')}
-      </Text>
-      {payments.length === 0 ? (
-        <Text style={styles.muted}>{t('cd_noPaymentsYet')}</Text>
-      ) : paysLong ? (
-        <ScrollView
-          nestedScrollEnabled
-          keyboardShouldPersistTaps="handled"
-          style={[styles.utangScrollBox, { maxHeight: UTANG_LIST_NESTED_MAX_HEIGHT }]}
-        >
-          {paymentNodes}
-        </ScrollView>
-      ) : (
-        paymentNodes
-      )}
-
-      <View style={styles.totals}>
-        <View style={styles.totRow}>
-          <Text variant="bodyMedium">{t('cd_subtotalItems')}</Text>
-          <Text variant="titleMedium" style={styles.totEm}>
-            {formatPeso(page.itemsTotal)}
-          </Text>
-        </View>
-        <View style={styles.totRow}>
-          <Text variant="bodyMedium">{t('cd_paidSoFar')}</Text>
-          <Text variant="titleMedium">{formatPeso(page.paidTotal)}</Text>
-        </View>
-        <View style={styles.totRow}>
-          <Text variant="titleSmall" style={styles.dueLabel}>
-            {t('cd_due')}
-          </Text>
-          <Text variant="titleLarge" style={styles.dueVal}>
-            {formatPeso(page.due)}
-          </Text>
-        </View>
-      </View>
-    </>
-  );
-}
-
 export function CustomerDetailScreen() {
   const { id } = useLocalSearchParams();
   const customerId = Array.isArray(id) ? id[0] : id;
-  const navigation = useNavigation();
   const router = useRouter();
-  const { t, locale } = useLocale();
+  const insets = useSafeAreaInsets();
+  const { t } = useLocale();
   const { showToast } = useToast();
-  const { runOperation } = useOperationQueue();
+  const { save, isSaving } = useSaveOperation();
   const theme = useTheme();
+  const { isDark } = useAppTheme();
+  const colors = useMemo(() => getCustomerDetailPalette(isDark), [isDark]);
   const { user } = useAuth();
   const { refresh, inventory } = useShopData();
   const { customer, loading } = useCustomer(user?.ownerId, customerId);
@@ -293,7 +118,6 @@ export function CustomerDetailScreen() {
   const bal = Number(customer?.balance) || 0;
   const [modalOpen, setModalOpen] = useState(false);
   const [modalType, setModalType] = useState('utang');
-  const [saving, setSaving] = useState(false);
   const [expandedPaidIds, setExpandedPaidIds] = useState({});
   const [editCustomerOpen, setEditCustomerOpen] = useState(false);
   const [customerMenuOpen, setCustomerMenuOpen] = useState(false);
@@ -307,7 +131,9 @@ export function CustomerDetailScreen() {
   const [deleteEntryOpen, setDeleteEntryOpen] = useState(false);
   const [deleteEntryKind, setDeleteEntryKind] = useState('item');
   const [deleteEntry, setDeleteEntry] = useState(null);
+  const [deletingEntry, setDeletingEntry] = useState(false);
   const [deletePinOpen, setDeletePinOpen] = useState(false);
+  const [deletingCustomer, setDeletingCustomer] = useState(false);
   const [clearOpen, setClearOpen] = useState(false);
 
   const openPage = useMemo(
@@ -334,77 +160,6 @@ export function CustomerDetailScreen() {
     }, [user?.ownerId, customerId, customer])
   );
 
-  useLayoutEffect(() => {
-    navigation.setOptions({
-      headerTitleAlign: 'center',
-      headerTitle: customer?.name?.trim()
-        ? customer.name.trim()
-        : t('nav_customer'),
-      headerTitleStyle: {
-        fontFamily: font.extraBold,
-        fontSize: 18,
-        color: theme.colors.onSurface,
-      },
-      headerRight: () =>
-        user?.ownerId && customer ? (
-          <Menu
-            visible={customerMenuOpen}
-            onDismiss={() => setCustomerMenuOpen(false)}
-            anchorPosition="bottom"
-            anchor={
-              <Appbar.Action
-                icon="dots-vertical"
-                onPress={() => setCustomerMenuOpen(true)}
-                accessibilityLabel={t('cd_headerMenuA11y')}
-              />
-            }
-          >
-            <Menu.Item
-              leadingIcon="pencil-outline"
-              title={t('cd_editTitle')}
-              onPress={() => {
-                setCustomerMenuOpen(false);
-                setEditCustomerOpen(true);
-              }}
-            />
-            <Menu.Item
-              leadingIcon="delete-outline"
-              title={t('cd_deleteConfirm')}
-              titleStyle={{ color: theme.colors.error }}
-              onPress={() => {
-                setCustomerMenuOpen(false);
-                void (async () => {
-                  if (await pinService.hasPin()) setDeletePinOpen(true);
-                  else setDeleteOpen(true);
-                })();
-              }}
-            />
-            <Menu.Item
-              leadingIcon="broom"
-              title={t('cd_clearRecords')}
-              titleStyle={{ color: theme.colors.error }}
-              onPress={() => {
-                setCustomerMenuOpen(false);
-                setClearOpen(true);
-              }}
-            />
-          </Menu>
-        ) : null,
-    });
-  }, [
-    navigation,
-    customer,
-    user?.ownerId,
-    customerId,
-    router,
-    refresh,
-    t,
-    locale,
-    theme,
-    showToast,
-    customerMenuOpen,
-  ]);
-
   const openUtang = () => {
     setModalType('utang');
     setModalOpen(true);
@@ -422,11 +177,9 @@ export function CustomerDetailScreen() {
       });
       return;
     }
-    setSaving(true);
     setModalOpen(false);
-    setSaving(false);
 
-    void runOperation({
+    void save({
       label: t('common_saving'),
       task: async () => {
         if (payload.type === 'utang') {
@@ -515,232 +268,225 @@ export function CustomerDetailScreen() {
   };
 
   if (loading && !customer) {
-    return <CustomerDetailSkeleton />;
+    return (
+      <View style={[styles.flex, { backgroundColor: colors.bg }]}>
+        <CustomerDetailSkeleton />
+      </View>
+    );
   }
 
   if (!customer) {
     return (
-      <View style={styles.center}>
-        <Text variant="bodyLarge">{t('cd_notFound')}</Text>
+      <View style={[styles.center, { backgroundColor: colors.bg }]}>
+        <Text style={[styles.notFound, { color: colors.text }]}>{t('cd_notFound')}</Text>
       </View>
     );
   }
 
   const canPay =
     Boolean(openPage) && (openPage.items || []).length > 0 && openPage.due > 0;
+  const customerName = customer.name?.trim() || '';
 
   return (
-    <View style={styles.flex}>
-      <Card mode="elevated" style={styles.hero}>
-        <Card.Content>
-          <Text variant="titleMedium" style={styles.muted}>
-            {t('cd_balanceNow')}
-          </Text>
-          <Text variant="displaySmall" style={styles.balance}>
-            {formatPeso(bal)}
-          </Text>
-          <Text variant="bodySmall" style={styles.heroMeta}>
-            {t('cd_lastActivity')}{' '}
-            {customer.lastTransactionAt
-              ? formatDateTime(customer.lastTransactionAt)
-              : t('cd_lastActivityNone')}
-          </Text>
-          {customer.updatedAt ? (
-            <Text variant="bodySmall" style={styles.heroMetaMuted}>
-              {t('cd_recordUpdated')}: {formatDateTime(customer.updatedAt)}
-            </Text>
-          ) : null}
-        </Card.Content>
-      </Card>
+    <View style={[styles.flex, { backgroundColor: colors.bg }]}>
+      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
 
-      <View style={styles.actions}>
-        <Button
-          mode="contained"
-          icon="plus-circle-outline"
-          onPress={openUtang}
-          style={styles.half}
-          contentStyle={styles.btnTall}
-        >
-          {t('cd_addItem')}
-        </Button>
-          <Button
-          mode="contained-tonal"
-          icon="cash"
-          onPress={openPayment}
-          style={styles.half}
-          contentStyle={styles.btnTall}
-          disabled={!canPay}
-        >
-          {t('cd_pay')}
-        </Button>
-      </View>
+      <ScrollView
+        contentContainerStyle={[styles.list, { paddingTop: insets.top }]}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        <CustomerDetailHeader
+          colors={colors}
+          t={t}
+          customerName={customerName}
+          menuOpen={customerMenuOpen}
+          onMenuOpen={() => setCustomerMenuOpen(true)}
+          onMenuClose={() => setCustomerMenuOpen(false)}
+          onBack={() => safeRouterBack(router, '/(tabs)')}
+          showMenu={Boolean(user?.ownerId)}
+          onEdit={() => {
+            setCustomerMenuOpen(false);
+            setEditCustomerOpen(true);
+          }}
+          onDelete={() => {
+            setCustomerMenuOpen(false);
+            void (async () => {
+              if (await pinService.hasPin()) setDeletePinOpen(true);
+              else setDeleteOpen(true);
+            })();
+          }}
+          onClearRecords={() => {
+            setCustomerMenuOpen(false);
+            setClearOpen(true);
+          }}
+        />
 
-      <ScrollView contentContainerStyle={styles.list}>
-        <Text variant="titleLarge" style={styles.section}>
-          {t('cd_activePage')}
-        </Text>
-        <Text variant="bodySmall" style={styles.hint}>
+        <CustomerDetailBalanceCard
+          colors={colors}
+          t={t}
+          balance={bal}
+          lastActivityAt={customer.lastTransactionAt}
+          updatedAt={customer.updatedAt}
+        />
+
+        <CustomerDetailActionRow
+          colors={colors}
+          t={t}
+          onAddItem={openUtang}
+          onPay={openPayment}
+          payDisabled={!canPay}
+        />
+
+        <HomeSectionHeader colors={colors} title={t('cd_activePage')} />
+        <Text style={[styles.sectionHint, { color: colors.textFaint }]}>
           {t('cd_activeHint')}
         </Text>
 
         {openPage ? (
-          <Card mode="outlined" style={styles.pageCard}>
-            <Card.Content>
-              <View style={styles.pageHeader}>
-                <Text variant="titleMedium" style={styles.pageTitle}>
+          <View
+            style={[
+              styles.pageCard,
+              { backgroundColor: colors.cardBg, borderColor: colors.border },
+            ]}
+          >
+            <View style={styles.pageHeader}>
+              <View style={styles.flex1}>
+                <Text style={[styles.pageTitle, { color: colors.text }]}>
                   {t('cd_listTitle')}
                 </Text>
-                <IconButton
-                  icon="printer-outline"
-                  size={24}
-                  onPress={() => onPrintPage(openPage)}
-                  accessibilityLabel={t('cd_printPageA11y')}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                />
+                <Text style={[styles.pageMeta, { color: colors.textFaint }]}>
+                  {t('cd_startedPrefix')} {formatDateTime(openPage.createdAt)}
+                </Text>
               </View>
-              <Text variant="bodySmall" style={styles.muted}>
-                {t('cd_startedPrefix')} {formatDateTime(openPage.createdAt)}
-              </Text>
+              <Pressable
+                onPress={() => onPrintPage(openPage)}
+                style={({ pressed }) => [
+                  styles.iconBtn,
+                  { backgroundColor: colors.iconBtnBg, borderColor: colors.border },
+                  pressed && styles.pressed,
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel={t('cd_printPageA11y')}
+              >
+                <MaterialCommunityIcons
+                  name="printer-outline"
+                  size={20}
+                  color={colors.textSecondary}
+                />
+              </Pressable>
+            </View>
 
-              <UtangPageItemsPaymentsTotals
-                page={openPage}
-                inventory={inventory}
-                t={t}
-                styles={styles}
-                onEditItem={(it) => openEdit('item', it)}
-                onDeleteItem={(it) => askDelete('item', it)}
-                onEditPayment={(p) => openEdit('payment', p)}
-                onDeletePayment={(p) => askDelete('payment', p)}
-              />
-            </Card.Content>
-          </Card>
+            <CustomerUtangPageBlock
+              page={openPage}
+              colors={colors}
+              inventory={inventory}
+              t={t}
+              onEditItem={(it) => openEdit('item', it)}
+              onDeleteItem={(it) => askDelete('item', it)}
+              onEditPayment={(p) => openEdit('payment', p)}
+              onDeletePayment={(p) => askDelete('payment', p)}
+            />
+          </View>
         ) : (
-          <Text style={styles.empty}>{t('cd_noOpenPage')}</Text>
+          <Text style={[styles.empty, { color: colors.textFaint }]}>{t('cd_noOpenPage')}</Text>
         )}
 
         {paidPages.length > 0 ? (
           <>
-            <Text variant="titleMedium" style={styles.archiveHeading}>
-              {t('cd_archiveTitle')}
-            </Text>
-            <Text variant="bodySmall" style={styles.archiveHint}>
+            <HomeSectionHeader colors={colors} title={t('cd_archiveTitle')} />
+            <Text style={[styles.sectionHint, { color: colors.textFaint }]}>
               {t('cd_archiveHint')}
             </Text>
             {paidPages.map((p) => {
               const expanded = Boolean(expandedPaidIds[p.id]);
               return (
-                <Card key={p.id} mode="outlined" style={styles.archiveCard}>
-                  <Card.Content>
-                    <View style={styles.pageHeader}>
-                      <View style={styles.flex1}>
-                        <Text variant="titleSmall" style={styles.lunas}>
-                          {t('cd_paid')}
-                        </Text>
-                        <Text variant="bodySmall" style={styles.muted}>
-                          {formatDateTime(p.paidAt)}
-                          {' · '}
-                          {formatPeso(p.itemsTotal)}
-                        </Text>
-                      </View>
-                      <IconButton
-                        icon="printer-outline"
-                        size={24}
-                        onPress={() => onPrintPage(p)}
-                        accessibilityLabel={t('cd_printReceiptA11y')}
-                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                      />
+                <View
+                  key={p.id}
+                  style={[
+                    styles.pageCard,
+                    styles.archiveCard,
+                    { backgroundColor: colors.cardBg, borderColor: colors.border },
+                  ]}
+                >
+                  <View style={styles.pageHeader}>
+                    <View style={styles.flex1}>
+                      <Text style={[styles.paidBadge, { color: colors.green600 }]}>
+                        {t('cd_paid')}
+                      </Text>
+                      <Text style={[styles.pageMeta, { color: colors.textFaint }]}>
+                        {formatDateTime(p.paidAt)} · {formatPeso(p.itemsTotal)}
+                      </Text>
                     </View>
-                    <Text variant="bodySmall" style={styles.muted}>
-                      {t('cd_archiveMeta', {
-                        itemCount: (p.items || []).length,
-                        payCount: (p.payments || []).length,
-                      })}
-                    </Text>
-                    <Button
-                      mode="text"
-                      compact
-                      icon={expanded ? 'chevron-up' : 'chevron-down'}
-                      onPress={() =>
-                        setExpandedPaidIds((prev) => ({
-                          ...prev,
-                          [p.id]: !prev[p.id],
-                        }))
-                      }
-                      style={styles.expandBtn}
-                      contentStyle={styles.expandBtnContent}
+                    <Pressable
+                      onPress={() => onPrintPage(p)}
+                      style={({ pressed }) => [
+                        styles.iconBtn,
+                        { backgroundColor: colors.iconBtnBg, borderColor: colors.border },
+                        pressed && styles.pressed,
+                      ]}
+                      accessibilityRole="button"
+                      accessibilityLabel={t('cd_printReceiptA11y')}
                     >
-                      {expanded
-                        ? t('cd_paidHideDetails')
-                        : t('cd_paidExpandDetails')}
-                    </Button>
-                    {expanded ? (
-                      <>
-                        <Text variant="bodySmall" style={styles.muted}>
-                          {t('cd_startedPrefix')}{' '}
-                          {formatDateTime(p.createdAt)}
-                        </Text>
-                        <UtangPageItemsPaymentsTotals
-                          page={p}
-                          inventory={inventory}
-                          t={t}
-                          styles={styles}
-                        />
-                      </>
-                    ) : null}
-                  </Card.Content>
-                </Card>
+                      <MaterialCommunityIcons
+                        name="printer-outline"
+                        size={20}
+                        color={colors.textSecondary}
+                      />
+                    </Pressable>
+                  </View>
+                  <Text style={[styles.archiveMeta, { color: colors.textFaint }]}>
+                    {t('cd_archiveMeta', {
+                      itemCount: (p.items || []).length,
+                      payCount: (p.payments || []).length,
+                    })}
+                  </Text>
+                  <Pressable
+                    onPress={() =>
+                      setExpandedPaidIds((prev) => ({
+                        ...prev,
+                        [p.id]: !prev[p.id],
+                      }))
+                    }
+                    style={({ pressed }) => [styles.expandBtn, pressed && styles.pressed]}
+                    accessibilityRole="button"
+                  >
+                    <MaterialCommunityIcons
+                      name={expanded ? 'chevron-up' : 'chevron-down'}
+                      size={20}
+                      color={colors.green600}
+                    />
+                    <Text style={[styles.expandText, { color: colors.green700 }]}>
+                      {expanded ? t('cd_paidHideDetails') : t('cd_paidExpandDetails')}
+                    </Text>
+                  </Pressable>
+                  {expanded ? (
+                    <>
+                      <Text style={[styles.pageMeta, { color: colors.textFaint, marginBottom: 8 }]}>
+                        {t('cd_startedPrefix')} {formatDateTime(p.createdAt)}
+                      </Text>
+                      <CustomerUtangPageBlock
+                        page={p}
+                        colors={colors}
+                        inventory={inventory}
+                        t={t}
+                        readOnly
+                      />
+                    </>
+                  ) : null}
+                </View>
               );
             })}
           </>
         ) : null}
 
-        <Card mode="outlined" style={styles.profileCard}>
-          <Card.Content>
-            <View style={styles.profileHeader}>
-              <Text variant="titleMedium" style={styles.profileHeading}>
-                {t('cd_profileTitle')}
-              </Text>
-              <Button
-                mode="text"
-                compact
-                icon="pencil-outline"
-                onPress={() => setEditCustomerOpen(true)}
-              >
-                {t('cd_editDetails')}
-              </Button>
-            </View>
-            <View style={styles.profileRow}>
-              <Text variant="bodySmall" style={styles.muted}>
-                {t('cd_profileName')}
-              </Text>
-              <Text variant="bodyLarge" style={styles.profileValue}>
-                {customer.name?.trim()
-                  ? customer.name.trim()
-                  : t('cd_profileEmpty')}
-              </Text>
-            </View>
-            <View style={styles.profileRow}>
-              <Text variant="bodySmall" style={styles.muted}>
-                {t('cd_profilePhone')}
-              </Text>
-              <Text variant="bodyLarge" style={styles.profileValue}>
-                {String(customer.phone || '').trim()
-                  ? String(customer.phone).trim()
-                  : t('cd_profileEmpty')}
-              </Text>
-            </View>
-            <View style={styles.profileRow}>
-              <Text variant="bodySmall" style={styles.muted}>
-                {t('cd_profileAddress')}
-              </Text>
-              <Text variant="bodyLarge" style={styles.profileValue}>
-                {String(customer.address || '').trim()
-                  ? String(customer.address).trim()
-                  : t('cd_profileEmpty')}
-              </Text>
-            </View>
-          </Card.Content>
-        </Card>
+        <HomeSectionHeader colors={colors} title={t('cd_profileTitle')} />
+        <CustomerDetailProfileCard
+          colors={colors}
+          t={t}
+          customer={customer}
+          onEdit={() => setEditCustomerOpen(true)}
+        />
       </ScrollView>
 
       <TransactionFormModal
@@ -748,7 +494,7 @@ export function CustomerDetailScreen() {
         onDismiss={() => setModalOpen(false)}
         initialType={modalType}
         onSubmit={onSubmitTx}
-        submitting={saving}
+        submitting={isSaving}
         inventoryItems={inventory}
         sheetDue={
           modalOpen && modalType === 'payment' && openPage
@@ -767,14 +513,12 @@ export function CustomerDetailScreen() {
         onDismiss={() => setEditEntryOpen(false)}
         kind={editKind}
         initial={editInitial || { id: '', amount: 0, description: '', note: '' }}
-        busy={saving}
+        busy={isSaving}
         onSave={(payload) => {
           if (!user?.ownerId || !customerId || !editInitial?.id) return;
-          setSaving(true);
           setEditEntryOpen(false);
-          setSaving(false);
 
-          void runOperation({
+          void save({
             label: editKind === 'item' ? t('common_item') : t('common_payment'),
             task: async () => {
               if (editKind === 'item') {
@@ -811,12 +555,13 @@ export function CustomerDetailScreen() {
         confirmText={t('cd_deleteConfirm')}
         cancelText={t('common_no')}
         destructive
+        confirmLoading={deletingEntry}
         onCancel={() => {
           setDeleteEntryOpen(false);
           setDeleteEntry(null);
         }}
         onConfirm={async () => {
-          if (!user?.ownerId || !customerId || !deleteEntry?.id) return;
+          if (deletingEntry || !user?.ownerId || !customerId || !deleteEntry?.id) return;
           const snap = {
             kind: deleteEntryKind,
             amount: deleteEntry.amount,
@@ -826,7 +571,7 @@ export function CustomerDetailScreen() {
                 : '',
             note: deleteEntry.note != null ? String(deleteEntry.note).trim() : '',
           };
-          setSaving(true);
+          setDeletingEntry(true);
           try {
             if (deleteEntryKind === 'item') {
               await deletePageItem(user.ownerId, customerId, deleteEntry.id);
@@ -866,7 +611,7 @@ export function CustomerDetailScreen() {
           } catch (e) {
             showToast({ type: 'error', message: e?.message || t('common_error') });
           } finally {
-            setSaving(false);
+            setDeletingEntry(false);
             setDeleteEntryOpen(false);
             setDeleteEntry(null);
           }
@@ -880,20 +625,24 @@ export function CustomerDetailScreen() {
         confirmText={t('cd_deleteConfirm')}
         cancelText={t('common_no')}
         destructive
+        confirmLoading={deletingCustomer}
         onCancel={() => setDeleteOpen(false)}
         onConfirm={async () => {
-          setDeleteOpen(false);
+          if (deletingCustomer) return;
+          setDeletingCustomer(true);
           try {
             if (!user?.ownerId) return;
             await deleteCustomer(user.ownerId, customerId);
             await refresh();
             await toastSavedOnDeviceAware(showToast, t, 'toast_customerDeleted');
-            router.back();
+            safeRouterBack(router, '/(tabs)');
           } catch (e) {
             showToast({
               type: 'error',
               message: e?.message || t('cd_deleteErr'),
             });
+          } finally {
+            setDeletingCustomer(false);
           }
         }}
       />
@@ -905,22 +654,21 @@ export function CustomerDetailScreen() {
         message={t('cd_deletePinMsg')}
         cancelText={t('common_cancel')}
         confirmText={t('cd_deleteConfirm')}
-        onConfirmed={async () => {
+        onConfirmed={() => {
           if (!user?.ownerId) return;
-          setSaving(true);
-          try {
-            await deleteCustomer(user.ownerId, customerId);
-            await refresh();
-            await toastSavedOnDeviceAware(showToast, t, 'toast_customerDeleted');
-            router.back();
-          } catch (e) {
-            showToast({
-              type: 'error',
-              message: e?.message || t('cd_deleteErr'),
-            });
-          } finally {
-            setSaving(false);
-          }
+          void save({
+            label: t('toast_customerDeleted'),
+            task: async () => {
+              await deleteCustomer(user.ownerId, customerId);
+              await refresh();
+            },
+            onSuccess: async () => {
+              await toastSavedOnDeviceAware(showToast, t, 'toast_customerDeleted');
+              safeRouterBack(router, '/(tabs)');
+            },
+            toastErrorMessage: t('cd_deleteErr'),
+            retryLabel: t('common_retry'),
+          });
         }}
       />
 
@@ -970,44 +718,46 @@ export function CustomerDetailScreen() {
         message={t('cd_clearRecordsMsg')}
         cancelText={t('common_cancel')}
         confirmText={t('cd_clearRecords')}
-        onConfirmed={async () => {
+        onConfirmed={() => {
           if (!user?.ownerId) return;
           const snapshot = cloneClearUndoSnapshot(pages);
           const lineCount = countClearUndoLines(snapshot);
-          setSaving(true);
-          try {
-            await clearCustomerRecords(user.ownerId, customerId);
-            await refresh();
-            const online = await isOnline();
-            if (lineCount > CLEAR_UNDO_MAX_LINES) {
-              await toastSavedOnDeviceAware(showToast, t, 'cd_clearRecordsDone');
-              return;
-            }
-            showToast({
-              type: online ? 'success' : 'warning',
-              message: t(online ? 'cd_clearRecordsDone' : 'toast_editsQueued'),
-              durationMs: 16_000,
-              actionLabel: t('common_undo'),
-              onAction: async () => {
-                try {
-                  await replayClearUndoSnapshot(
-                    user.ownerId,
-                    customerId,
-                    snapshot,
-                    t('common_item')
-                  );
-                  await refresh();
-                  showToast({ type: 'success', message: t('cd_undoClearRestored') });
-                } catch {
-                  showToast({ type: 'error', message: t('cd_undoClearFailed') });
-                }
-              },
-            });
-          } catch (e) {
-            showToast({ type: 'error', message: e?.message || t('common_error') });
-          } finally {
-            setSaving(false);
-          }
+          void save({
+            label: t('cd_clearRecords'),
+            task: async () => {
+              await clearCustomerRecords(user.ownerId, customerId);
+              await refresh();
+              return { snapshot, lineCount, online: await isOnline() };
+            },
+            onSuccess: async ({ snapshot: snap, lineCount: lines, online }) => {
+              if (lines > CLEAR_UNDO_MAX_LINES) {
+                await toastSavedOnDeviceAware(showToast, t, 'cd_clearRecordsDone');
+                return;
+              }
+              showToast({
+                type: online ? 'success' : 'warning',
+                message: t(online ? 'cd_clearRecordsDone' : 'toast_editsQueued'),
+                durationMs: 16_000,
+                actionLabel: t('common_undo'),
+                onAction: async () => {
+                  try {
+                    await replayClearUndoSnapshot(
+                      user.ownerId,
+                      customerId,
+                      snap,
+                      t('common_item')
+                    );
+                    await refresh();
+                    showToast({ type: 'success', message: t('cd_undoClearRestored') });
+                  } catch {
+                    showToast({ type: 'error', message: t('cd_undoClearFailed') });
+                  }
+                },
+              });
+            },
+            toastErrorMessage: t('common_error'),
+            retryLabel: t('common_retry'),
+          });
         }}
       />
     </View>
@@ -1018,106 +768,80 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   flex1: { flex: 1 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  hero: { margin: 16, borderRadius: 16 },
-  profileCard: {
-    marginHorizontal: 16,
-    marginTop: 24,
-    marginBottom: 8,
-    borderRadius: 12,
+  notFound: {
+    fontFamily: font.medium,
+    fontSize: 16,
   },
-  profileHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-  profileHeading: { fontFamily: font.extraBold, flex: 1 },
-  profileRow: { marginTop: 10 },
-  profileValue: { marginTop: 2, fontFamily: font.medium },
-  muted: { opacity: 0.75 },
-  balance: { marginTop: 6, fontFamily: font.extraBold },
-  heroMeta: { marginTop: 12, opacity: 0.85, lineHeight: 20 },
-  heroMetaMuted: { marginTop: 4, opacity: 0.65, lineHeight: 18 },
-  // print modal moved into AppChoiceDialog
-  actions: {
-    flexDirection: 'row',
-    gap: 12,
-    paddingHorizontal: 16,
-    marginBottom: 8,
-  },
-  half: { flex: 1, borderRadius: 12 },
-  btnTall: { paddingVertical: 8 },
-  section: { paddingHorizontal: 16, marginTop: 8, fontFamily: font.extraBold },
-  hint: {
-    paddingHorizontal: 16,
-    marginBottom: 8,
-    opacity: 0.65,
+  list: { paddingBottom: 32 },
+  sectionHint: {
+    fontFamily: font.medium,
+    fontSize: 12,
     lineHeight: 18,
+    paddingHorizontal: 16,
+    marginTop: -4,
+    marginBottom: 10,
   },
-  pageCard: { marginHorizontal: 16, marginBottom: 12, borderRadius: 12 },
+  pageCard: {
+    marginHorizontal: 16,
+    marginBottom: 12,
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    padding: 14,
+  },
+  archiveCard: { marginBottom: 10 },
   pageHeader: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
+    gap: 8,
+    marginBottom: 10,
   },
-  pageTitle: { fontFamily: font.extraBold },
-  blockLabel: { marginTop: 12, marginBottom: 4, opacity: 0.8 },
-  longSheetHint: {
+  pageTitle: {
+    fontFamily: font.semiBold,
+    fontSize: 15,
+  },
+  pageMeta: {
+    fontFamily: font.medium,
     fontSize: 12,
-    opacity: 0.72,
+    marginTop: 2,
     lineHeight: 16,
-    marginBottom: 4,
   },
-  utangScrollBox: {
-    marginBottom: 2,
-  },
-  itemAmt: { alignSelf: 'center', fontFamily: font.bold },
-  rowRight: { flexDirection: 'row', alignItems: 'center', gap: 2 },
-  rowIconBtn: { margin: 0 },
-  itemStickerWrap: {
-    justifyContent: 'center',
-    alignSelf: 'center',
-    marginTop: 6,
-  },
-  itemStickerImg: {
-    width: 44,
-    height: 44,
-    borderRadius: 11,
-    borderWidth: 1,
-    borderColor: 'rgba(45,138,78,0.22)',
-    backgroundColor: 'rgba(244,247,245,0.9)',
-  },
-  div: { marginVertical: 12 },
-  totals: {
-    marginTop: 12,
-    padding: 12,
+  iconBtn: {
+    width: 40,
+    height: 40,
     borderRadius: 10,
-    backgroundColor: 'rgba(128,128,128,0.08)',
-  },
-  totRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    borderWidth: StyleSheet.hairlineWidth,
     alignItems: 'center',
-    marginVertical: 4,
+    justifyContent: 'center',
   },
-  totEm: { fontFamily: font.extraBold },
-  dueLabel: { fontFamily: font.bold, marginTop: 4 },
-  dueVal: { fontFamily: font.extraBold, marginTop: 4 },
-  archiveHeading: {
-    paddingHorizontal: 16,
-    marginTop: 20,
-    fontFamily: font.extraBold,
+  paidBadge: {
+    fontFamily: font.semiBold,
+    fontSize: 14,
   },
-  archiveHint: {
-    paddingHorizontal: 16,
+  archiveMeta: {
+    fontFamily: font.medium,
+    fontSize: 12,
+    lineHeight: 16,
+    marginBottom: 6,
+  },
+  expandBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    alignSelf: 'flex-start',
     marginBottom: 8,
-    opacity: 0.65,
-    lineHeight: 18,
+    paddingVertical: 4,
   },
-  archiveCard: { marginHorizontal: 16, marginBottom: 10, borderRadius: 12 },
-  expandBtn: { marginTop: 4, alignSelf: 'flex-start' },
-  expandBtnContent: { flexDirection: 'row-reverse' },
-  lunas: { fontFamily: font.extraBold, color: '#0a7' },
-  list: { paddingBottom: 32 },
-  empty: { padding: 24, textAlign: 'center', opacity: 0.7 },
+  expandText: {
+    fontFamily: font.medium,
+    fontSize: 13,
+  },
+  empty: {
+    paddingHorizontal: 24,
+    paddingVertical: 20,
+    textAlign: 'center',
+    fontFamily: font.medium,
+    fontSize: 14,
+  },
+  pressed: { opacity: 0.88 },
 });

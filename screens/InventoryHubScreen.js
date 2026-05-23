@@ -1,5 +1,11 @@
 import { useFocusEffect, useRouter } from 'expo-router';
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, {
+  useCallback,
+  useDeferredValue,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import {
   Dimensions,
   FlatList,
@@ -10,25 +16,26 @@ import {
   Image,
 } from 'react-native';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Chip, IconButton, Searchbar, Text, useTheme, Button, Dialog, Portal, TextInput } from 'react-native-paper';
+import { Text, useTheme, Button, Dialog, Portal, TextInput } from 'react-native-paper';
 import { AppConfirmDialog } from '@/components/AppConfirmDialog';
 import { VerifyPinModal } from '@/components/VerifyPinModal';
 import { EmptyState } from '@/components/EmptyState';
+import { InventoryHubListHeader } from '@/components/InventoryHubListHeader';
 import { InventoryHubGridSkeleton } from '@/components/Skeleton';
 import { InventoryProductEditorModal } from '@/components/InventoryProductEditorModal';
+import InventoryCategoryCard from '@/components/InventoryCategoryCard';
 import ProductImage from '@/components/ProductImage';
 import { INVENTORY_CATEGORY_PRESET_KEYS } from '@/constants/inventoryCategories';
-import {
-  getCategoryStickerVisual,
-  matchInventoryLabelToSticker,
-} from '@/constants/inventoryCategoryStickers';
+import { matchInventoryLabelToSticker } from '@/constants/inventoryCategoryStickers';
+import { getInventoryHubPalette } from '@/constants/inventoryHubPalette';
 import { font } from '@/constants/theme';
+import { useAppTheme } from '@/contexts/AppThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLocale } from '@/contexts/LocaleContext';
 import { useToast } from '@/contexts/ToastContext';
-import { useShopData } from '@/contexts/ShopDataContext';
+import { useInventoryShopData } from '@/hooks/useShopInventory';
+import { buildInventoryHubCards } from '@/utils/buildInventoryHubCards';
 import {
   forgetNetworkStickerMissForLabel,
   suggestAndPersistCategorySticker,
@@ -44,7 +51,6 @@ import {
   removeExtraInventoryCategory,
   setCategoryStickerOverride,
 } from '@/services/preferencesService';
-import { categoryToSlug } from '@/utils/categoryRoute';
 import { formatPeso } from '@/utils/currency';
 
 const GAP = 12;
@@ -60,32 +66,6 @@ function hasPrice(it) {
   return it.unitPrice != null && Number.isFinite(Number(it.unitPrice));
 }
 
-function hexToRgba(hex, a) {
-  const raw = String(hex || '').replace('#', '').trim();
-  const v =
-    raw.length === 3
-      ? raw.split('').map((c) => c + c).join('')
-      : raw;
-  const r = parseInt(v.slice(0, 2), 16);
-  const g = parseInt(v.slice(2, 4), 16);
-  const b = parseInt(v.slice(4, 6), 16);
-  if (!Number.isFinite(r) || !Number.isFinite(g) || !Number.isFinite(b)) {
-    return `rgba(0,0,0,${a})`;
-  }
-  return `rgba(${r},${g},${b},${a})`;
-}
-
-function cardTint(cardKey) {
-  // Match HTML examples: groceries -> green tint, snacks -> amber tint.
-  if (String(cardKey).includes('inv_cat_groceries')) {
-    return { kind: 'green', border: '#c3e8ce' };
-  }
-  if (String(cardKey).includes('inv_cat_snacks')) {
-    return { kind: 'amber', border: '#fde68a' };
-  }
-  return { kind: 'none', border: '#dde8df' };
-}
-
 export function InventoryHubScreen() {
   const router = useRouter();
   const { t } = useLocale();
@@ -93,9 +73,12 @@ export function InventoryHubScreen() {
   const { user, refreshPinState } = useAuth();
   const insets = useSafeAreaInsets();
   const theme = useTheme();
-  const { inventory, refresh, loading, error } = useShopData();
+  const { isDark } = useAppTheme();
+  const hubColors = useMemo(() => getInventoryHubPalette(isDark), [isDark]);
+  const { inventory, refresh, loading, error } = useInventoryShopData();
   const [refreshing, setRefreshing] = useState(false);
   const [q, setQ] = useState('');
+  const deferredQ = useDeferredValue(q);
   const [hideEmptyTypes, setHideEmptyTypes] = useState(false);
   const flatListRef = useRef(null);
   const gridAnchorY = useRef(0);
@@ -109,11 +92,10 @@ export function InventoryHubScreen() {
   const [pinVerifyRemovalOpen, setPinVerifyRemovalOpen] = useState(false);
   const pendingRemovalAfterPin = useRef(null);
   const [stickerOverrides, setStickerOverrides] = useState({});
-  const [presetsHubExpanded, setPresetsHubExpanded] = useState(true);
   const stickerEnrichTimerRef = useRef(null);
 
   const rows = useMemo(() => inventory || [], [inventory]);
-  const nq = useMemo(() => normalize(q), [q]);
+  const nq = useMemo(() => normalize(deferredQ), [deferredQ]);
 
   const itemMatchesHubQuery = useCallback(
     (it) => {
@@ -139,15 +121,6 @@ export function InventoryHubScreen() {
       })
     );
   }, [rowsMatchingQuery, nq]);
-
-  const productCountByCategoryNorm = useMemo(() => {
-    const m = new Map();
-    for (const it of rowsMatchingQuery) {
-      const k = normalize(String(it.category || '').trim());
-      m.set(k, (m.get(k) || 0) + 1);
-    }
-    return m;
-  }, [rowsMatchingQuery]);
 
   const colW = (Dimensions.get('window').width - PAD * 2 - GAP) / 2;
 
@@ -232,69 +205,17 @@ export function InventoryHubScreen() {
     }
   };
 
-  const allCards = useMemo(() => {
-    const list = [];
-
-    const uncCount = rowsMatchingQuery.filter((it) => {
-      const isUncat = !String(it.category || '').trim();
-      return isUncat;
-    }).length;
-    list.push({
-      key: '_',
-      slug: '_',
-      title: t('inv_filterUncat'),
-      count: uncCount,
-    });
-
-    const presetLabels = new Set(
-      INVENTORY_CATEGORY_PRESET_KEYS.map((k) => normalize(t(k)))
-    );
-
-    for (const presetKey of INVENTORY_CATEGORY_PRESET_KEYS) {
-      const label = t(presetKey);
-      const count = productCountByCategoryNorm.get(normalize(label)) || 0;
-      list.push({
-        key: `p-${presetKey}`,
-        slug: categoryToSlug(label, t),
-        title: label,
-        count,
-      });
-    }
-    const customNames = new Set();
-    const customNamesNorm = new Set();
-    for (const it of rows) {
-      const c = String(it.category || '').trim();
-      if (!c) continue;
-      const norm = normalize(c);
-      if (presetLabels.has(norm)) continue;
-      if (customNamesNorm.has(norm)) continue;
-      customNamesNorm.add(norm);
-      customNames.add(c);
-    }
-    for (const c of extraCategories) {
-      const label = String(c || '').trim();
-      if (!label) continue;
-      const norm = normalize(label);
-      if (presetLabels.has(norm)) continue;
-      if (customNamesNorm.has(norm)) continue;
-      customNamesNorm.add(norm);
-      customNames.add(label);
-    }
-    const sortedCustom = Array.from(customNames).sort((a, b) =>
-      a.localeCompare(b, undefined, { sensitivity: 'base' })
-    );
-    for (const c of sortedCustom) {
-      const count = productCountByCategoryNorm.get(normalize(c)) || 0;
-      list.push({
-        key: `c-${c}`,
-        slug: categoryToSlug(c, t),
-        title: c,
-        count,
-      });
-    }
-
-    return list;
-  }, [rows, rowsMatchingQuery, productCountByCategoryNorm, t, extraCategories]);
+  const allCards = useMemo(
+    () =>
+      buildInventoryHubCards({
+        rows,
+        rowsMatchingQuery,
+        extraCategories,
+        t,
+        uncategorizedLabel: t('inv_filterUncat'),
+      }),
+    [rows, rowsMatchingQuery, extraCategories, t]
+  );
 
   const displayCards = useMemo(() => {
     let cards = allCards;
@@ -310,136 +231,30 @@ export function InventoryHubScreen() {
     return cards;
   }, [allCards, nq, hideEmptyTypes]);
 
-  const hasPresetTiles = useMemo(
-    () => allCards.some((c) => String(c.key).startsWith('p-')),
-    [allCards]
-  );
-
-  const displayCardsForGrid = useMemo(() => {
-    if (!presetsHubExpanded) {
-      return displayCards.filter((c) => !String(c.key).startsWith('p-'));
-    }
-    return displayCards;
-  }, [displayCards, presetsHubExpanded]);
+  const onRemoveCategoryPress = useCallback((target) => {
+    setRemoveCategoryTarget(target);
+    setRemoveCategoryOpen(true);
+  }, []);
 
   const renderCategoryCard = useCallback(
     ({ item: c }) => {
+      const nk = normalize(c.title);
       const stickerOverride =
-        String(c.key).startsWith('c-') &&
-        stickerOverrides[normalize(c.title)]
-          ? stickerOverrides[normalize(c.title)]
+        String(c.key).startsWith('c-') && stickerOverrides[nk]
+          ? stickerOverrides[nk]
           : null;
-      const visual = getCategoryStickerVisual(c.key, c.title, stickerOverride);
-      const tint = cardTint(c.key);
-      const hasItems = c.count > 0;
-      const affectedCount =
-        productCountByCategoryNorm.get(normalize(c.title)) || 0;
-      const isRemovableCategory =
-        Boolean(user?.ownerId) &&
-        c.key !== '_' &&
-        (String(c.key).startsWith('c-') ||
-          (String(c.key).startsWith('p-') && affectedCount > 0));
-      const isGreen = tint.kind === 'green';
-      const isAmber = tint.kind === 'amber';
-      const countColor = hasItems
-        ? isAmber
-          ? '#f59e0b'
-          : '#2d8a4e'
-        : '#9ab09e';
-      const iconWrapBg = hasItems
-        ? hexToRgba(isAmber ? '#f59e0b' : '#2d8a4e', 0.12)
-        : hexToRgba(visual.bg, 0.18);
-
-      const cardBgStyle = hasItems
-        ? isGreen
-          ? styles.cardBgGreen
-          : isAmber
-          ? styles.cardBgAmber
-          : styles.cardBgGreen
-        : null;
-
-      const borderColor = hasItems ? tint.border : '#dde8df';
-      const borderWidth = hasItems ? 1.5 : 1;
-
       return (
-        <Pressable
-          onPress={() =>
-            router.push(`/inventory/${encodeURIComponent(c.slug)}`)
-          }
-          style={[styles.cell, { width: colW }]}
-        >
-          <View
-            style={[
-              styles.card,
-              {
-                borderColor,
-                borderWidth,
-              },
-            ]}
-          >
-            {isRemovableCategory ? (
-              <IconButton
-                icon="trash-can-outline"
-                size={18}
-                style={styles.cardRemoveBtn}
-                iconColor="#9ab09e"
-                accessibilityLabel={t('inv_removeCategoryA11y', {
-                  name: c.title,
-                })}
-                onPress={() => {
-                  setRemoveCategoryTarget({
-                    title: c.title,
-                    key: c.key,
-                    productCount: affectedCount,
-                  });
-                  setRemoveCategoryOpen(true);
-                }}
-              />
-            ) : null}
-            {cardBgStyle ? (
-              <LinearGradient
-                colors={cardBgStyle.colors}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={StyleSheet.absoluteFillObject}
-              />
-            ) : null}
-            <View style={styles.cardInner}>
-              <View style={[styles.iconWrap, { backgroundColor: iconWrapBg }]}> 
-                <MaterialCommunityIcons
-                  name={visual.icon}
-                  size={22}
-                  color={hasItems ? (isAmber ? '#f59e0b' : '#2d8a4e') : '#5a7060'}
-                />
-              </View>
-              <View style={styles.cardDetails}>
-                <Text
-                  variant="titleMedium"
-                  style={styles.cardTitle}
-                  numberOfLines={2}
-                >
-                  {c.title}
-                </Text>
-                <Text style={[styles.cardCount, { color: countColor }]}> 
-                  {c.count}
-                </Text>
-                <Text variant="bodySmall" style={styles.cardSub}> 
-                  {t('inv_hubProductCount', { count: c.count })}
-                </Text>
-              </View>
-            </View>
-          </View>
-        </Pressable>
+        <InventoryCategoryCard
+          card={c}
+          colW={colW}
+          stickerOverride={stickerOverride}
+          ownerId={user?.ownerId}
+          onRemovePress={onRemoveCategoryPress}
+          colors={hubColors}
+        />
       );
     },
-    [
-      stickerOverrides,
-      productCountByCategoryNorm,
-      router,
-      t,
-      user?.ownerId,
-      colW,
-    ]
+    [stickerOverrides, colW, user?.ownerId, onRemoveCategoryPress, hubColors]
   );
 
   const scrollToCategoryGrid = useCallback(() => {
@@ -469,7 +284,7 @@ export function InventoryHubScreen() {
   }, [nq, scrollToCategoryGrid]);
 
   const busy = Boolean(user?.ownerId) && loading;
-  const typesCountVisible = displayCardsForGrid.length;
+  const typesCountVisible = displayCards.length;
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [initialName, setInitialName] = useState('');
@@ -539,249 +354,66 @@ export function InventoryHubScreen() {
     [openEdit, theme.colors.surface, theme.colors.outlineVariant, theme.colors.outline, theme.colors.onSurface, theme.colors.onSurfaceVariant, t]
   );
 
-  const listHeaderComponent = useMemo(() => {
-    return (
-      <View>
-        <View>
-          {error ? (
-            <Text variant="bodySmall" style={styles.err}>
-              {error?.message || t('common_error')}
-            </Text>
-          ) : null}
+  const openNewCategory = useCallback(() => {
+    setNewCatName('');
+    setNewCatOpen(true);
+  }, []);
 
-          <View
-            style={[
-              styles.topbar,
-              {
-                backgroundColor: theme.colors.surface,
-                borderBottomColor:
-                  theme.colors.outlineVariant || theme.colors.outline,
-              },
-            ]}
-          >
-            <View style={{ width: 32, height: 32 }} />
-            <Text style={[styles.pageTitle, { color: theme.colors.onSurface }]}> 
-              {t('tab_inventory')}
-            </Text>
-            <IconButton
-              icon="plus"
-              size={18}
-              onPress={() => router.push('/inventory/_')}
-              iconColor="#fff"
-              containerColor="#2d8a4e"
-              style={styles.plusBtn}
-              accessibilityLabel={t('inv_hubPlusUncatA11y')}
-            />
-          </View>
+  const onToggleFilter = useCallback(() => {
+    if (nq) return;
+    setHideEmptyTypes((v) => !v);
+    setTimeout(() => scrollToCategoryGrid(), 80);
+  }, [nq, scrollToCategoryGrid]);
 
-          <View
-            style={[
-              styles.stickySearchHost,
-              { backgroundColor: theme.colors.background },
-            ]}
-          >
-            <View style={styles.searchWrap}>
-              <Searchbar
-                placeholder={t('inv_searchPlaceholder')}
-                value={q}
-                onChangeText={setQ}
-                style={[
-                  styles.search,
-                  {
-                    backgroundColor: theme.colors.surface,
-                    borderColor:
-                      theme.colors.outlineVariant || theme.colors.outline,
-                  },
-                ]}
-                inputStyle={[styles.searchInput, { color: theme.colors.onSurface }]}
-                elevation={0}
-              />
-              <Text
-                variant="bodySmall"
-                style={[styles.searchHint, { color: theme.colors.onSurfaceVariant }]}
-              >
-                {t('inv_hubSearchCategoryHint')}
-              </Text>
-            </View>
-          </View>
-
-          <View
-            style={[
-              styles.statsStrip,
-              {
-                backgroundColor: theme.colors.surface,
-                borderColor: theme.colors.outlineVariant || theme.colors.outline,
-              },
-            ]}
-          >
-            <View style={styles.statsStripTopRow}>
-              <View style={styles.statsStripText}>
-                <Text
-                  variant="titleSmall"
-                  style={[styles.statsStripTitle, { color: theme.colors.onSurface }]}
-                  numberOfLines={2}
-                >
-                  {t('inv_hubStatsTitle')}
-                </Text>
-                <Text
-                  variant="bodySmall"
-                  style={[styles.statsStripSub, { color: theme.colors.onSurfaceVariant }]}
-                  numberOfLines={2}
-                >
-                  {t('inv_hubStatsSub')}
-                </Text>
-              </View>
-              {user?.ownerId ? (
-                <Button
-                  mode="text"
-                  compact
-                  icon="folder-plus-outline"
-                  onPress={() => {
-                    setNewCatName('');
-                    setNewCatOpen(true);
-                  }}
-                  style={styles.newCatInOverview}
-                  textColor="#2d8a4e"
-                >
-                  {t('inv_newCategoryBtn')}
-                </Button>
-              ) : null}
-            </View>
-            <View style={styles.statsChips}>
-              <Chip
-                mode="flat"
-                compact
-                icon="package-variant"
-                onPress={onProductChipPress}
-                accessibilityRole="button"
-                accessibilityHint={t('inv_hubChipProductsA11y')}
-                style={[
-                  styles.statChip,
-                  {
-                    backgroundColor:
-                      theme.colors.elevation?.level2 || theme.colors.surfaceVariant,
-                    borderColor:
-                      theme.colors.outlineVariant || theme.colors.outline,
-                  },
-                ]}
-                textStyle={[styles.statChipText, { color: theme.colors.onSurfaceVariant }]}
-              >
-                {t('inv_hubProductCount', { count: rows.length })}
-              </Chip>
-              <Chip
-                mode="flat"
-                compact
-                selected={hideEmptyTypes && !nq}
-                onPress={onTypesChipPress}
-                accessibilityRole="button"
-                accessibilityHint={t('inv_hubChipTypesA11y')}
-                style={[
-                  styles.statChip,
-                  {
-                    backgroundColor:
-                      hideEmptyTypes && !nq
-                        ? '#e8f5ed'
-                        : theme.colors.elevation?.level2 || theme.colors.surfaceVariant,
-                    borderColor:
-                      hideEmptyTypes && !nq
-                        ? '#2d8a4e'
-                        : theme.colors.outlineVariant || theme.colors.outline,
-                  },
-                ]}
-                textStyle={[styles.statChipText, { color: theme.colors.onSurfaceVariant }]}
-              >
-                {t('inv_hubTypesCount', { count: typesCountVisible })}
-              </Chip>
-            </View>
-          </View>
-
-          {user?.ownerId && hasPresetTiles ? (
-            <Pressable
-              onPress={() => setPresetsHubExpanded((v) => !v)}
-              style={[
-                styles.presetsToggle,
-                {
-                  backgroundColor: theme.colors.surface,
-                  borderColor: theme.colors.outlineVariant || theme.colors.outline,
-                },
-              ]}
-              accessibilityRole="button"
-              accessibilityLabel={
-                presetsHubExpanded
-                  ? t('inv_hubPresetsToggleCollapse')
-                  : t('inv_hubPresetsToggleExpand')
-              }
-            >
-              <Text style={[styles.presetsToggleLabel, { color: theme.colors.onSurface }]}> 
-                {t('inv_hubPresetsSection')}
-              </Text>
-              <MaterialCommunityIcons
-                name={presetsHubExpanded ? 'chevron-up' : 'chevron-down'}
-                size={22}
-                color={theme.colors.onSurfaceVariant}
-              />
-            </Pressable>
-          ) : null}
-
-          <View
-            onLayout={(e) => {
-              gridAnchorY.current = e.nativeEvent.layout.y;
-            }}
-          />
-
-          <Text style={[styles.hint, { color: theme.colors.onSurfaceVariant }]}> 
-            {t('inv_hubHintShort')}
-          </Text>
-
-          {!busy && rows.length === 0 && !nq ? (
-            <EmptyState
-              icon="shape-outline"
-              title={t('inv_hubEmptyTitle')}
-              subtitle={t('inv_hubEmptySubtitle')}
-            />
-          ) : !busy && rows.length > 0 && nq && displayCards.length === 0 ? (
-            <EmptyState
-              icon="magnify"
-              title={t('inv_emptySearchTitle')}
-              subtitle={t('inv_emptySearchSubtitle')}
-            />
-          ) : null}
-
-          {nq && matchedProducts.length > 0 ? (
-            <View style={styles.searchResultsSection}>
-              <Text style={[styles.searchResultsTitle, { color: theme.colors.onSurface }]}> 
-                {t('inv_hubSearchResultsTitle')}
-              </Text>
-            </View>
-          ) : null}
-        </View>
+  const listHeaderComponent = useMemo(
+    () => (
+      <View
+        onLayout={(e) => {
+          gridAnchorY.current = e.nativeEvent.layout.y;
+        }}
+      >
+        <InventoryHubListHeader
+          colors={hubColors}
+          t={t}
+          error={error}
+          q={q}
+          onChangeQuery={setQ}
+          productCount={rows.length}
+          typeCount={typesCountVisible}
+          hideEmptyTypes={hideEmptyTypes}
+          hasSearch={Boolean(nq)}
+          onToggleFilter={onToggleFilter}
+          onProductPillPress={onProductChipPress}
+          onTypesPillPress={onTypesChipPress}
+          onNewCategory={openNewCategory}
+          onAddProduct={() => router.push('/inventory/_')}
+          showNewCategory={Boolean(user?.ownerId)}
+          showSearchResultsTitle={Boolean(nq && matchedProducts.length > 0)}
+          showEmptyCatalog={!busy && rows.length === 0 && !nq}
+          showEmptySearchTypes={!busy && rows.length > 0 && nq && displayCards.length === 0}
+        />
       </View>
-    );
-  }, [
-    error,
-    theme.colors.background,
-    theme.colors.surface,
-    theme.colors.outline,
-    theme.colors.outlineVariant,
-    theme.colors.onSurface,
-    theme.colors.onSurfaceVariant,
-    t,
-    rows,
-    q,
-    nq,
-    setQ,
-    onProductChipPress,
-    onTypesChipPress,
-    hideEmptyTypes,
-    typesCountVisible,
-    user?.ownerId,
-    hasPresetTiles,
-    presetsHubExpanded,
-    matchedProducts,
-    busy,
-    openEdit,
-    displayCards,
-  ]);
+    ),
+    [
+      hubColors,
+      t,
+      error,
+      q,
+      rows.length,
+      typesCountVisible,
+      hideEmptyTypes,
+      nq,
+      onToggleFilter,
+      onProductChipPress,
+      onTypesChipPress,
+      openNewCategory,
+      router,
+      user?.ownerId,
+      matchedProducts.length,
+      busy,
+      displayCards.length,
+    ]
+  );
   const submitNewCategory = useCallback(async () => {
     const name = newCatName.trim().slice(0, 80);
     if (!name) {
@@ -1012,13 +644,13 @@ export function InventoryHubScreen() {
       <FlatList
         key={isSearchMode ? 'search-mode' : 'grid-mode'}
         ref={flatListRef}
-        style={[styles.flex, { backgroundColor: theme.colors.background }]}
+        style={[styles.flex, { backgroundColor: hubColors.bg }]}
         contentContainerStyle={{
           paddingHorizontal: PAD,
           paddingTop: Math.max(insets.top, 10),
           paddingBottom: 32,
         }}
-        data={isSearchMode ? matchedProducts : displayCardsForGrid}
+        data={isSearchMode ? matchedProducts : displayCards}
         renderItem={isSearchMode ? renderSearchResultItem : renderCategoryCard}
         keyExtractor={(item) =>
           isSearchMode ? String(item.id || '') : item.key
@@ -1132,6 +764,7 @@ export function InventoryHubScreen() {
       cancelText={t('common_cancel')}
       destructive
       confirmDisabled={removingCategory}
+      confirmLoading={removingCategory}
       onConfirm={() => void onConfirmRemoveCategoryDialog()}
       onCancel={() => {
         if (!removingCategory) {
@@ -1161,98 +794,7 @@ export function InventoryHubScreen() {
 }
 
 const styles = StyleSheet.create({
-  flex: { flex: 1, backgroundColor: '#f0f4f1' },
-  pad: { paddingHorizontal: PAD, paddingBottom: 32 },
-  topbar: {
-    backgroundColor: '#ffffff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#dde8df',
-    paddingHorizontal: 0,
-    paddingTop: 8,
-    paddingBottom: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginHorizontal: -PAD,
-    paddingLeft: PAD,
-    paddingRight: PAD,
-    marginBottom: 0,
-  },
-  pageTitle: {
-    flex: 1,
-    textAlign: 'center',
-    fontFamily: font.extraBold,
-    fontSize: 18,
-    color: '#1a2e1f',
-    letterSpacing: -0.3,
-  },
-  plusBtn: {
-    margin: 0,
-    borderRadius: 8,
-    width: 32,
-    height: 32,
-  },
-  searchWrap: { paddingTop: 14 },
-  /** Sticky slot: no border/shadow — avoids a “double frame” around Searchbar + hint. */
-  stickySearchHost: {
-    zIndex: 4,
-    paddingBottom: 2,
-  },
-  searchHint: { fontSize: 11, marginTop: 6, lineHeight: 15, fontFamily: font.medium },
-  presetsToggle: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: 10,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-  },
-  presetsToggleLabel: { fontFamily: font.semiBold, fontSize: 13 },
-  statsStrip: {
-    flexDirection: 'column',
-    gap: 12,
-    marginTop: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    borderRadius: 14,
-    borderWidth: 1,
-  },
-  statsStripTopRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    width: '100%',
-  },
-  statsStripText: { flex: 1, minWidth: 0, paddingRight: 4 },
-  statsStripTitle: { fontFamily: font.extraBold, fontSize: 15, letterSpacing: -0.2 },
-  statsStripSub: { fontFamily: font.medium, fontSize: 11, marginTop: 4, lineHeight: 15 },
-  newCatInOverview: {
-    margin: 0,
-    flexShrink: 0,
-  },
-  statsChips: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    alignItems: 'center',
-    width: '100%',
-  },
-  statChip: {
-    borderWidth: 1,
-    borderRadius: 10,
-    height: 32,
-  },
-  statChipText: { fontFamily: font.semiBold, fontSize: 12, marginVertical: 0 },
-  search: {
-    backgroundColor: '#ffffff',
-    borderWidth: 1.5,
-    borderColor: '#dde8df',
-    borderRadius: 10,
-  },
-  searchInput: { fontFamily: font.medium, fontSize: 14, color: '#1a2e1f' },
-  hint: { paddingTop: 10, paddingBottom: 4, fontSize: 12, color: '#9ab09e' },
+  flex: { flex: 1 },
   newCatDialog: {
     borderRadius: 16,
     borderWidth: 1,
@@ -1260,53 +802,8 @@ const styles = StyleSheet.create({
     width: '92%',
     maxWidth: 400,
   },
-  err: { color: '#C62828', marginBottom: 12 },
-  center: { textAlign: 'center', padding: 24 },
-  grid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-    paddingTop: 10,
-  },
-  cell: {},
-  card: {
-    borderRadius: 16,
-    minHeight: 168,
-    overflow: 'hidden',
-    backgroundColor: '#ffffff',
-    position: 'relative',
-  },
-  cardRemoveBtn: {
-    position: 'absolute',
-    top: 0,
-    right: 0,
-    margin: 0,
-    zIndex: 2,
-  },
-  cardInner: {
-    flexDirection: 'column',
-    alignItems: 'center',
-    paddingTop: 16,
-    paddingBottom: 14,
-    overflow: 'visible',
-  },
-  iconWrap: {
-    width: 48,
-    height: 48,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 6,
-  },
-  cardDetails: {
-    width: '100%',
-    alignItems: 'center',
-  },
-  cardTitle: { fontFamily: font.extraBold, textAlign: 'center', fontSize: 13, color: '#1a2e1f' },
-  cardCount: { fontFamily: font.extraBold, marginTop: 6, fontSize: 28, lineHeight: 28 },
-  cardSub: { marginTop: 2, color: '#9ab09e', textAlign: 'center' },
-  searchResultsSection: { marginBottom: 16 },
-  searchResultsTitle: { fontFamily: font.extraBold, fontSize: 15, marginBottom: 10 },
+  err: { color: '#C62828', marginBottom: 4 },
+  searchResultsSection: { marginBottom: 8 },
   productResultCard: {
     borderWidth: 1,
     borderRadius: 14,
@@ -1329,7 +826,4 @@ const styles = StyleSheet.create({
     marginRight: 10,
   },
   productThumb: { width: 56, height: 56 },
-
-  cardBgGreen: { colors: ['#e8f5ed', '#f0faf3'] },
-  cardBgAmber: { colors: ['#fef3e2', '#fff8ed'] },
 });

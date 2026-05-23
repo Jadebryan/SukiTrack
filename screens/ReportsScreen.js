@@ -3,15 +3,23 @@ import {
   Pressable,
   RefreshControl,
   ScrollView,
+  StatusBar,
   StyleSheet,
+  Text,
   View,
 } from 'react-native';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Card, IconButton, Text, useTheme } from 'react-native-paper';
 import { EmptyState } from '@/components/EmptyState';
+import { HubScreenHeader } from '@/components/hub/HubScreenHeader';
+import { HomeSectionHeader } from '@/components/home/HomeSectionHeader';
+import { ReportMetricCard, ReportMetricRow } from '@/components/reports/ReportMetricCard';
+import { ReportPeriodPills } from '@/components/reports/ReportPeriodPills';
 import { ReportsScreenSkeleton } from '@/components/Skeleton';
+import { getHomePalette } from '@/constants/homePalette';
+import { getTabBarOuterHeight } from '@/constants/tabBar';
 import { font } from '@/constants/theme';
+import { useAppTheme } from '@/contexts/AppThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLocale } from '@/contexts/LocaleContext';
 import { useShopData } from '@/contexts/ShopDataContext';
@@ -23,30 +31,26 @@ export function ReportsScreen() {
   const { t } = useLocale();
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
-  const theme = useTheme();
+  const { isDark } = useAppTheme();
+  const colors = useMemo(() => getHomePalette(isDark), [isDark]);
   const { customers, pages, loading, error, refresh } = useShopData();
   const [refreshing, setRefreshing] = useState(false);
   const [period, setPeriod] = useState('day');
+  const tabBarPad = getTabBarOuterHeight(insets.bottom);
 
   const ready = Boolean(user?.ownerId);
   const cust = ready ? customers : [];
   const pgs = ready ? pages : [];
 
-  const summary = useMemo(
-    () => buildReportSummary(cust, pgs),
-    [cust, pgs]
-  );
+  const summary = useMemo(() => buildReportSummary(cust, pgs), [cust, pgs]);
 
   const weekSeries = useMemo(() => {
-    // Monday–Sunday of the current week.
     const now = new Date();
     const startDay = new Date(now);
     startDay.setHours(0, 0, 0, 0);
     const startWeek = new Date(startDay);
     const dow = startWeek.getDay();
     startWeek.setDate(startWeek.getDate() - ((dow + 6) % 7));
-    const endWeek = new Date(startWeek);
-    endWeek.setDate(endWeek.getDate() + 7);
 
     const days = Array.from({ length: 7 }).map((_, i) => {
       const d0 = new Date(startWeek);
@@ -92,29 +96,13 @@ export function ReportsScreen() {
   const periodBlock = useMemo(() => {
     switch (period) {
       case 'week':
-        return {
-          title: t('rep_weekTitle'),
-          bucket: summary.weekly,
-          hint: t('rep_weekHint'),
-        };
+        return { title: t('rep_weekTitle'), bucket: summary.weekly };
       case 'month':
-        return {
-          title: t('rep_monthTitle'),
-          bucket: summary.monthly,
-          hint: null,
-        };
+        return { title: t('rep_monthTitle'), bucket: summary.monthly };
       case 'all':
-        return {
-          title: t('rep_allTime'),
-          bucket: summary.allTime,
-          hint: t('rep_allTimeHint'),
-        };
+        return { title: t('rep_allTime'), bucket: summary.allTime };
       default:
-        return {
-          title: t('rep_todayTitle'),
-          bucket: summary.daily,
-          hint: null,
-        };
+        return { title: t('rep_todayTitle'), bucket: summary.daily };
     }
   }, [period, summary, t]);
 
@@ -133,86 +121,40 @@ export function ReportsScreen() {
 
   return (
     <ScrollView
-      contentContainerStyle={[
-        styles.pad,
-        {
-          paddingTop: Math.max(insets.top, 10),
-          backgroundColor: theme.colors.background,
-        },
-      ]}
+      style={{ flex: 1, backgroundColor: colors.bg }}
+      contentContainerStyle={{
+        paddingTop: insets.top,
+        paddingBottom: tabBarPad + 16,
+      }}
       refreshControl={
         <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
       }
+      showsVerticalScrollIndicator={false}
     >
-      <View
-        style={[
-          styles.topbar,
-          {
-            backgroundColor: theme.colors.surface,
-            borderBottomColor: theme.colors.outlineVariant || theme.colors.outline,
-          },
-        ]}
-      >
-        <View style={{ width: 32, height: 32 }} />
-        <Text style={[styles.pageTitle, { color: theme.colors.onSurface }]}>
-          {t('tab_reports')}
-        </Text>
-        <IconButton
-          icon="refresh"
-          size={18}
-          onPress={onRefresh}
-          style={styles.refreshBtn}
-          iconColor={theme.colors.onSurfaceVariant}
-          containerColor={theme.colors.surfaceVariant}
-        />
-      </View>
+      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
 
-      <View style={styles.periodTabs}>
-        {[
-          { key: 'day', label: t('rep_today') },
-          { key: 'week', label: t('rep_week') },
-          { key: 'month', label: t('rep_month') },
-          { key: 'all', label: t('rep_allTime') },
-        ].map((x) => {
-          const active = period === x.key;
-          return (
-            <Pressable
-              key={x.key}
-              onPress={() => setPeriod(x.key)}
-              style={[
-                styles.periodTab,
-                {
-                  backgroundColor: active ? '#2d8a4e' : theme.colors.surface,
-                  borderColor: active
-                    ? '#2d8a4e'
-                    : theme.colors.outlineVariant || theme.colors.outline,
-                },
-              ]}
-            >
-              <Text
-                style={[
-                  styles.periodTabText,
-                  { color: active ? '#ffffff' : theme.colors.onSurfaceVariant },
-                ]}
-              >
-                {x.label}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </View>
+      <HubScreenHeader
+        colors={colors}
+        title={t('tab_reports')}
+        rightIcon="refresh"
+        onRightPress={onRefresh}
+        rightA11y={t('common_retry')}
+        rightLoading={refreshing}
+      />
+
+      <ReportPeriodPills
+        colors={colors}
+        t={t}
+        activeKey={period}
+        onChange={setPeriod}
+      />
 
       {busy && cust.length === 0 && pgs.length === 0 ? (
         <ReportsScreenSkeleton />
       ) : null}
 
       {error ? (
-        <Text
-          variant="bodyMedium"
-          style={[styles.errBanner, { color: theme.colors.error }]}
-        >
-          {error?.message || t('common_error')}
-        </Text>
+        <Text style={styles.errBanner}>{error?.message || t('common_error')}</Text>
       ) : null}
 
       {isEmpty ? (
@@ -225,266 +167,212 @@ export function ReportsScreen() {
 
       {!isEmpty ? (
         <>
-          <Card
-            mode="outlined"
-            style={[
-              styles.card,
-              {
-                backgroundColor: theme.colors.surface,
-                borderColor: theme.colors.outlineVariant || theme.colors.outline,
-              },
-            ]}
+          <View style={[styles.hero, { backgroundColor: colors.green600 }]}>
+            <Text style={styles.heroLabel}>{periodBlock.title}</Text>
+            <Text style={styles.heroAmount}>
+              {formatPeso(periodBlock.bucket.payments)}
+            </Text>
+            <Text style={styles.heroSub}>{t('rep_collected')}</Text>
+            <View style={styles.heroStats}>
+              <View style={styles.heroStat}>
+                <Text style={styles.heroStatVal}>
+                  {formatPeso(periodBlock.bucket.utangAdded)}
+                </Text>
+                <Text style={styles.heroStatLbl}>{t('rep_creditAdded')}</Text>
+              </View>
+              <View style={styles.heroStat}>
+                <Text style={styles.heroStatVal}>{formatPeso(periodBlock.bucket.net)}</Text>
+                <Text style={styles.heroStatLbl}>{t('rep_net')}</Text>
+              </View>
+            </View>
+          </View>
+
+          <HomeSectionHeader colors={colors} title={t('rep_summary').toUpperCase()} />
+
+          <ReportMetricCard
+            colors={colors}
+            title={t('rep_summary')}
+            icon="clipboard-text-outline"
           >
-            <Card.Content>
-              <View style={styles.cardTitleRow}>
-                <MaterialCommunityIcons name="clipboard-text-outline" size={18} color="#2d8a4e" />
-                <Text style={[styles.cardTitle, { color: theme.colors.onSurface }]}>
-                  {t('rep_summary')}
-                </Text>
-              </View>
-              <ReportRow
-                label={t('rep_totalUnpaid')}
-                value={formatPeso(summary.totalUnpaid)}
-                tone="amber"
-              />
-              <ReportRow
-                label={t('rep_unpaidCustomersLabel')}
-                value={String(summary.unpaidCustomerCount)}
-              />
-              <ReportRow
-                label={t('rep_totalCollected')}
-                value={formatPeso(summary.totalCollected)}
-                tone="positive"
-              />
-            </Card.Content>
-          </Card>
+            <ReportMetricRow
+              colors={colors}
+              label={t('rep_totalUnpaid')}
+              value={formatPeso(summary.totalUnpaid)}
+              tone="amber"
+            />
+            <ReportMetricRow
+              colors={colors}
+              label={t('rep_unpaidCustomersLabel')}
+              value={String(summary.unpaidCustomerCount)}
+            />
+            <ReportMetricRow
+              colors={colors}
+              label={t('rep_totalCollected')}
+              value={formatPeso(summary.totalCollected)}
+              tone="positive"
+              noDivider
+            />
+          </ReportMetricCard>
 
-          <Card
-            mode="outlined"
-            style={[
-              styles.card,
-              {
-                backgroundColor: theme.colors.surface,
-                borderColor: theme.colors.outlineVariant || theme.colors.outline,
-              },
-            ]}
+          <ReportMetricCard
+            colors={colors}
+            title={period === 'day' ? t('rep_todayTitle') : t('rep_activity')}
+            icon="flash"
+            iconColor={colors.amber700}
           >
-            <Card.Content style={{ paddingBottom: 0 }}>
-              <View style={styles.cardTitleRow}>
-                <MaterialCommunityIcons name="flash" size={18} color="#f59e0b" />
-                <Text style={[styles.cardTitle, { color: theme.colors.onSurface }]}>
-                  {period === 'day' ? t('rep_todayTitle') : t('rep_activity')}
-                </Text>
-              </View>
+            <ReportMetricRow
+              colors={colors}
+              label={t('rep_collected')}
+              value={formatPeso(periodBlock.bucket.payments)}
+              tone="positive"
+            />
+            <ReportMetricRow
+              colors={colors}
+              label={t('rep_creditAdded')}
+              value={formatPeso(periodBlock.bucket.utangAdded)}
+              tone="amber"
+              noDivider
+            />
+          </ReportMetricCard>
 
-              <ReportRow
-                label={t('rep_collected')}
-                value={formatPeso(periodBlock.bucket.payments)}
-                tone="positive"
-              />
-              <ReportRow
-                label={t('rep_creditAdded')}
-                value={formatPeso(periodBlock.bucket.utangAdded)}
-                tone="amber"
-                noDivider
-              />
-
-              <View
-                style={[
-                  styles.netRow,
-                  { backgroundColor: theme.colors.errorContainer },
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.netLabel,
-                    { color: theme.colors.onErrorContainer },
-                  ]}
-                >
-                  {t('rep_net')}
-                </Text>
-                <Text style={[styles.netValue, { color: theme.colors.error }]}>
-                  {formatPeso(periodBlock.bucket.net)}
-                </Text>
-              </View>
-            </Card.Content>
-          </Card>
-
-          <Card
-            mode="outlined"
-            style={[
-              styles.card,
-              {
-                backgroundColor: theme.colors.surface,
-                borderColor: theme.colors.outlineVariant || theme.colors.outline,
-              },
-            ]}
+          <ReportMetricCard
+            colors={colors}
+            title={t('rep_weekTitle')}
+            icon="chart-bar"
           >
-            <Card.Content>
-              <View style={styles.cardTitleRow}>
-                <MaterialCommunityIcons name="chart-bar" size={18} color="#2d8a4e" />
-                <Text style={[styles.cardTitle, { color: theme.colors.onSurface }]}>
-                  {t('rep_weekTitle')}
-                </Text>
+            <View style={styles.chartWrap}>
+              <View style={styles.miniChart}>
+                {weekSeries.labels.map((lbl, i) => {
+                  const cVal = weekSeries.collected[i] || 0;
+                  const pVal = weekSeries.pending[i] || 0;
+                  const max = Math.max(...weekSeries.collected, ...weekSeries.pending, 1);
+                  const hCollected = Math.max(6, Math.round((cVal / max) * 52));
+                  const hPending = Math.max(6, Math.round((pVal / max) * 52));
+                  const showCollected = cVal > 0;
+                  return (
+                    <View key={`${lbl}-${i}`} style={styles.barWrap}>
+                      <View
+                        style={[
+                          styles.bar,
+                          {
+                            height: showCollected ? hCollected : hPending,
+                            backgroundColor: showCollected
+                              ? colors.green600
+                              : colors.green50,
+                          },
+                        ]}
+                      />
+                      <Text style={[styles.barLbl, { color: colors.textFaint }]}>
+                        {lbl}
+                      </Text>
+                    </View>
+                  );
+                })}
               </View>
-
-              <View style={styles.chartWrap}>
-                <View style={styles.miniChart}>
-                  {weekSeries.labels.map((lbl, i) => {
-                    const cVal = weekSeries.collected[i] || 0;
-                    const pVal = weekSeries.pending[i] || 0;
-                    const max = Math.max(...weekSeries.collected, ...weekSeries.pending, 1);
-                    const hCollected = Math.max(6, Math.round((cVal / max) * 52));
-                    const hPending = Math.max(6, Math.round((pVal / max) * 52));
-                    const showCollected = cVal > 0;
-                    return (
-                      <View key={`${lbl}-${i}`} style={styles.barWrap}>
-                        <View style={[styles.bar, { height: showCollected ? hCollected : hPending }, showCollected && styles.barFilled]} />
-                        <Text style={[styles.barLbl, { color: theme.colors.onSurfaceVariant }]}>
-                          {lbl}
-                        </Text>
-                      </View>
-                    );
-                  })}
+              <View style={styles.legend}>
+                <View style={styles.legendItem}>
+                  <View
+                    style={[styles.legendDot, { backgroundColor: colors.green600 }]}
+                  />
+                  <Text style={[styles.legendText, { color: colors.textFaint }]}>
+                    {t('rep_collected')}
+                  </Text>
                 </View>
-                <View style={styles.legend}>
-                  <View style={styles.legendItem}>
-                    <View style={[styles.legendDot, { backgroundColor: '#2d8a4e' }]} />
-                    <Text style={[styles.legendText, { color: theme.colors.onSurfaceVariant }]}>
-                      {t('rep_collected')}
-                    </Text>
-                  </View>
-                  <View style={styles.legendItem}>
-                    <View style={[styles.legendDot, { backgroundColor: '#e8f5ed' }]} />
-                    <Text style={[styles.legendText, { color: theme.colors.onSurfaceVariant }]}>
-                      {t('rep_creditAdded')}
-                    </Text>
-                  </View>
+                <View style={styles.legendItem}>
+                  <View
+                    style={[styles.legendDot, { backgroundColor: colors.green50 }]}
+                  />
+                  <Text style={[styles.legendText, { color: colors.textFaint }]}>
+                    {t('rep_creditAdded')}
+                  </Text>
                 </View>
               </View>
-            </Card.Content>
-          </Card>
+            </View>
+          </ReportMetricCard>
         </>
       ) : null}
-
-      <View style={styles.spacer} />
     </ScrollView>
   );
 }
 
-function ReportRow({ label, value, tone, noDivider }) {
-  const theme = useTheme();
-  return (
-    <View
-      style={[
-        styles.rRow,
-        {
-          borderBottomColor: theme.colors.surfaceVariant,
-        },
-        noDivider && { borderBottomWidth: 0, paddingBottom: 12 },
-      ]}
-    >
-      <Text style={[styles.rLabel, { color: theme.colors.onSurfaceVariant }]}>
-        {label}
-      </Text>
-      <Text
-        style={[
-          styles.rVal,
-          { color: theme.colors.onSurface },
-          tone === 'positive' && styles.rValPositive,
-          tone === 'negative' && styles.rValNegative,
-          tone === 'amber' && styles.rValAmber,
-        ]}
-      >
-        {value}
-      </Text>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
-  pad: { paddingHorizontal: 16, paddingBottom: 32 },
-  topbar: {
-    borderBottomWidth: 1,
-    marginHorizontal: -16,
-    paddingHorizontal: 16,
-    paddingTop: 8,
-    paddingBottom: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 0,
+  errBanner: {
+    color: '#C62828',
+    marginHorizontal: 16,
+    marginBottom: 12,
+    fontFamily: font.medium,
+    fontSize: 13,
   },
-  pageTitle: {
-    flex: 1,
-    textAlign: 'center',
+  hero: {
+    marginHorizontal: 16,
+    marginTop: 8,
+    borderRadius: 12,
+    padding: 18,
+    gap: 4,
+  },
+  heroLabel: {
+    fontFamily: font.medium,
+    fontSize: 13,
+    color: '#9FE1CB',
+  },
+  heroAmount: {
     fontFamily: font.extraBold,
-    fontSize: 18,
-    letterSpacing: -0.3,
+    fontSize: 30,
+    color: '#FFFFFF',
+    letterSpacing: -0.5,
+    marginTop: -2,
   },
-  refreshBtn: { margin: 0, borderRadius: 8, width: 32, height: 32 },
-  periodTabs: { flexDirection: 'row', gap: 4, paddingTop: 14 },
-  periodTab: {
+  heroSub: {
+    fontFamily: font.medium,
+    fontSize: 12,
+    color: '#E1F5EE',
+    marginBottom: 8,
+  },
+  heroStats: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 4,
+  },
+  heroStat: {
     flex: 1,
-    borderWidth: 1.5,
+    backgroundColor: 'rgba(255,255,255,0.15)',
     borderRadius: 8,
-    paddingVertical: 7,
-    alignItems: 'center',
-    justifyContent: 'center',
+    padding: 10,
+    gap: 2,
   },
-  periodTabActive: { backgroundColor: '#2d8a4e', borderColor: '#2d8a4e' },
-  periodTabText: { fontFamily: font.semiBold, fontSize: 12 },
-  periodTabTextActive: { color: '#ffffff' },
-
-  card: { borderRadius: 16, marginTop: 12 },
-  cardTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 14 },
-  cardTitle: { fontFamily: font.extraBold, fontSize: 15 },
-
-  rRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 7,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f4f1',
+  heroStatVal: {
+    fontFamily: font.semiBold,
+    fontSize: 14,
+    color: '#FFFFFF',
   },
-  rLabel: { fontFamily: font.medium, fontSize: 13, flex: 1, paddingRight: 12 },
-  rVal: { fontFamily: font.extraBold, fontSize: 15 },
-  rValPositive: { color: '#2d8a4e' },
-  rValNegative: { color: '#ef4444' },
-  rValAmber: { color: '#f59e0b' },
-
-  netRow: {
-    backgroundColor: '#fee2e2',
-    marginHorizontal: -16,
-    marginTop: 0,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderBottomLeftRadius: 14,
-    borderBottomRightRadius: 14,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+  heroStatLbl: {
+    fontFamily: font.medium,
+    fontSize: 10,
+    color: '#9FE1CB',
+    lineHeight: 13,
   },
-  netLabel: { fontFamily: font.semiBold, fontSize: 13 },
-  netValue: { fontFamily: font.extraBold, fontSize: 15, color: '#ef4444' },
-
   chartWrap: { paddingTop: 4 },
-  miniChart: { flexDirection: 'row', alignItems: 'flex-end', gap: 5, height: 52 },
+  miniChart: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 5,
+    height: 52,
+  },
   barWrap: { flex: 1, alignItems: 'center', gap: 3 },
-  bar: { width: '100%', borderTopLeftRadius: 4, borderTopRightRadius: 4, backgroundColor: '#e8f5ed' },
-  barFilled: { backgroundColor: '#2d8a4e' },
-  barLbl: { fontFamily: font.semiBold, fontSize: 9, color: '#9ab09e' },
+  bar: {
+    width: '100%',
+    borderTopLeftRadius: 4,
+    borderTopRightRadius: 4,
+  },
+  barLbl: {
+    fontFamily: font.semiBold,
+    fontSize: 9,
+  },
   legend: { flexDirection: 'row', gap: 12, marginTop: 10 },
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   legendDot: { width: 8, height: 8, borderRadius: 2 },
-  legendText: { fontFamily: font.semiBold, fontSize: 11, color: '#9ab09e' },
-
-  center: { textAlign: 'center', padding: 16 },
-  errBanner: {
-    color: '#C62828',
-    marginBottom: 12,
-    paddingHorizontal: 4,
+  legendText: {
+    fontFamily: font.medium,
+    fontSize: 11,
   },
-  spacer: { height: 8 },
 });

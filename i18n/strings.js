@@ -20,6 +20,8 @@ export const STRINGS = {
     common_payment: 'Payment',
     common_saving: 'Saving…',
     common_savingCount: '{count} saving…',
+    common_savingFileTitle: 'Saving your file',
+    common_savingUploadSub: 'Uploading to cloud storage…',
     common_retry: 'Retry',
     app_name: 'SukiTrack',
 
@@ -38,6 +40,7 @@ export const STRINGS = {
     toast_exportReady: 'Export ready — pick an app to share.',
     toast_emailCopied: 'Email copied to clipboard.',
     toast_saveFailedRetry: 'Failed to save. Tap to retry.',
+    toast_saveCancelled: 'Save cancelled.',
 
     // Navigation / headers
     nav_register: 'Create account',
@@ -227,6 +230,8 @@ export const STRINGS = {
     // Home
     home_totalUnpaid: 'Total outstanding',
     home_withDebt: 'customers with a balance',
+    home_statWithBalance: 'With balance',
+    home_sectionCustomerCount: '{count} customers',
     home_searchPlaceholder: 'Search name, phone, or address…',
     home_apiError:
       'API or MongoDB issue. Check that the server is running and the URL is correct.',
@@ -245,7 +250,6 @@ export const STRINGS = {
     home_sortBalance: 'Balance',
     home_sortRecent: 'Recent',
     home_errorRetry: 'Try again',
-    home_fabCustomer: 'Customer',
     home_totalCustomers: 'Total customers',
     home_allTimePaid: 'All-time paid',
     home_chipAll: 'All',
@@ -267,15 +271,13 @@ export const STRINGS = {
     home_recentHeading: 'Recent',
     home_navTipsTitle: 'Get around faster',
     home_navTips1: 'Bottom tabs: Customers, Inventory, Reports, Settings.',
-    home_navTips2: 'FAB opens quick actions (new customer, jump to inventory or reports).',
+    home_navTips2: 'Tap the green + button for quick actions (new customer, inventory, or reports).',
     home_navTips3: 'Long-press the Customers tab for the same jumps. Export from Settings → Data.',
     home_navTipsDismiss: 'Got it',
-    home_quickTitle: 'Quick actions',
     home_quickNewCustomer: 'New customer',
     home_quickInventory: 'Open inventory',
     home_quickReports: 'Open reports',
     home_quickLastCustomer: 'Open {name}',
-    home_quickClose: 'Close',
     home_tabLongTitle: 'Quick jump',
     home_tabLongAddCustomer: 'New customer',
     home_tabLongInventory: 'Inventory',
@@ -283,6 +285,7 @@ export const STRINGS = {
     home_notifBellA11y: 'Notifications and activity',
     home_addCustomerTopA11y: 'Add customer',
     home_fabQuickA11y: 'Quick actions menu',
+    home_fabQuickCloseA11y: 'Close quick actions',
 
     ac_errSave: 'Could not save customer.',
     ac_errNoId: 'No ID returned from server.',
@@ -367,6 +370,8 @@ export const STRINGS = {
 
     // Transaction modal
     tm_title: 'Credit page',
+    tm_saving: 'Saving…',
+    tm_savingEdit: 'Saving edit…',
     tm_hint:
       'Add items to the sheet, or record a payment. Partial payments are OK — pay in installments until the page is fully settled.',
     tm_paymentDueLabel: 'Due on this page: {amount}',
@@ -390,6 +395,8 @@ export const STRINGS = {
     inv_add: 'Add',
     inv_addTitle: 'New product',
     inv_editTitle: 'Edit product',
+    inv_saving: 'Saving…',
+    inv_savingEdit: 'Saving edit…',
     inv_fieldName: 'Product name',
     inv_fieldPrice: 'Default price (₱, optional)',
     inv_priceHint:
@@ -455,6 +462,11 @@ export const STRINGS = {
     inv_hubProductCount: '{count} products',
     inv_hubStatsTitle: 'Catalog overview',
     inv_hubStatsSub: 'Totals across every category you use.',
+    inv_hubOverviewSummary: '{products} products across {types} types',
+    inv_hubProductsLabel: 'products',
+    inv_hubTypesLabel: 'types',
+    inv_newCategoryShort: 'New',
+    inv_hubSectionHint: 'Tap to manage',
     inv_hubTypesCount: '{count} types',
     inv_hubChipProductsA11y: 'Scroll to category grid. Clears product search.',
     inv_hubChipTypesA11y:
@@ -494,6 +506,10 @@ export const STRINGS = {
     inv_toastStickerOffline:
       'You are offline — a default tile icon is used until suggestions can run online.',
     inv_catScreenHint: 'Tap a row to edit. Use + to add a product in this type.',
+    inv_catRowHint: 'Tap a row to edit',
+    inv_fabAddToCategory: 'Add product to {category}',
+    inv_moreActions: 'More actions',
+    inv_suggestedPrefix: 'Suggested',
     inv_catBulkHeaderHint:
       'Tip: the “Uncategorize all” action in the top bar moves every product here to Uncategorized (you can Undo right after).',
     inv_catBulkSelectedHint:
@@ -633,6 +649,7 @@ export const STRINGS = {
     card_noneYet: 'none yet',
     card_noActivityYet: 'No activity yet',
     card_owes: 'owes',
+    card_paidUp: 'paid up',
 
     // Not found
     nf_title: 'Not found',
@@ -702,6 +719,8 @@ export const STRINGS = {
     common_payment: 'Bayad',
     common_saving: 'Isinasave…',
     common_savingCount: '{count} isinasave…',
+    common_savingFileTitle: 'Sinasave ang file mo',
+    common_savingUploadSub: 'Ina-upload sa cloud storage…',
     common_retry: 'Subukan muli',
     app_name: 'SukiTrack',
 
@@ -720,6 +739,7 @@ export const STRINGS = {
     toast_exportReady: 'Handa na ang export — pumili kung saan i-share.',
     toast_emailCopied: 'Nakopya ang email sa clipboard.',
     toast_saveFailedRetry: 'Hindi na-save. Pindutin upang subukang muli.',
+    toast_saveCancelled: 'Kinansela ang pag-save.',
 
     nav_register: 'Bagong account',
     nav_back: 'Bumalik',
@@ -906,6 +926,8 @@ export const STRINGS = {
 
     home_totalUnpaid: 'Kabuuang hindi pa bayad',
     home_withDebt: 'ang may utang',
+    home_statWithBalance: 'May balanse',
+    home_sectionCustomerCount: '{count} na customer',
     home_searchPlaceholder: 'Hanapin ang pangalan, phone, o address…',
     home_apiError:
       'May problema sa API o MongoDB. Tumingin kung naka-on ang server at tama ang URL.',
@@ -925,7 +947,6 @@ export const STRINGS = {
     home_sortBalance: 'Utang',
     home_sortRecent: 'Kamakailan',
     home_errorRetry: 'Subukan ulit',
-    home_fabCustomer: 'Customer',
     home_totalCustomers: 'Kabuuang customer',
     home_allTimePaid: 'Kabuuang nabayaran',
     home_chipAll: 'Lahat',
@@ -947,15 +968,13 @@ export const STRINGS = {
     home_recentHeading: 'Kamakailan',
     home_navTipsTitle: 'Mas mabilis na galaw',
     home_navTips1: 'Tabs sa ibaba: Customer, Inventory, Ulat, Settings.',
-    home_navTips2: 'Ang FAB ay nagbubukas ng mabilis na aksyon (bagong customer, inventory o ulat).',
+    home_navTips2: 'Pindutin ang berdeng + para sa mabilis na aksyon (bagong customer, inventory, o ulat).',
     home_navTips3: 'I-long-press ang tab na Customer para sa parehong lipat. I-export mula sa Settings → Data.',
     home_navTipsDismiss: 'Sige',
-    home_quickTitle: 'Mabilis na aksyon',
     home_quickNewCustomer: 'Bagong customer',
     home_quickInventory: 'Buksan ang inventory',
     home_quickReports: 'Buksan ang ulat',
     home_quickLastCustomer: 'Buksan si {name}',
-    home_quickClose: 'Isara',
     home_tabLongTitle: 'Mabilis na lipat',
     home_tabLongAddCustomer: 'Bagong customer',
     home_tabLongInventory: 'Inventory',
@@ -963,6 +982,7 @@ export const STRINGS = {
     home_notifBellA11y: 'Mga abiso at galaw',
     home_addCustomerTopA11y: 'Magdagdag ng customer',
     home_fabQuickA11y: 'Menu ng mabilis na aksyon',
+    home_fabQuickCloseA11y: 'Isara ang mabilis na aksyon',
 
     ac_errSave: 'Hindi na-save ang customer.',
     ac_errNoId: 'Walang ID mula sa server.',
@@ -1045,6 +1065,8 @@ export const STRINGS = {
     cd_paidHideDetails: 'Itago ang detalye',
 
     tm_title: 'Pahina ng utang',
+    tm_saving: 'Isinasave…',
+    tm_savingEdit: 'Isinasave (edit)…',
     tm_hint:
       'Magdagdag ng item sa sheet, o mag-record ng bayad. OK ang partial / hulug-hulug — magbayad nang paulit hanggang mabuo ang pahina.',
     tm_paymentDueLabel: 'Kulang sa pahinang ito: {amount}',
@@ -1068,6 +1090,8 @@ export const STRINGS = {
     inv_add: 'Dagdag',
     inv_addTitle: 'Bagong produkto',
     inv_editTitle: 'I-edit ang produkto',
+    inv_saving: 'Isinasave…',
+    inv_savingEdit: 'Isinasave ang pag-edit…',
     inv_fieldName: 'Pangalan ng produkto',
     inv_fieldPrice: 'Default na presyo (₱, opsyonal)',
     inv_priceHint:
@@ -1133,6 +1157,11 @@ export const STRINGS = {
     inv_hubProductCount: '{count} na produkto',
     inv_hubStatsTitle: 'Buod ng imbentaryo',
     inv_hubStatsSub: 'Kabuuan sa lahat ng ginagamit mong uri.',
+    inv_hubOverviewSummary: '{products} na produkto sa {types} na uri',
+    inv_hubProductsLabel: 'produkto',
+    inv_hubTypesLabel: 'uri',
+    inv_newCategoryShort: 'Bago',
+    inv_hubSectionHint: 'I-tap para i-manage',
     inv_hubTypesCount: '{count} na uri',
     inv_hubChipProductsA11y:
       'Mag-scroll sa grid ng kategorya. Buburahin ang search sa produkto.',
@@ -1174,6 +1203,10 @@ export const STRINGS = {
       'Offline ka — pansamantalang default na icon hanggang makapag-online.',
     inv_catScreenHint:
       'Pindutin ang row para i-edit. Gamitin ang + para magdagdag sa uri na ito.',
+    inv_catRowHint: 'Pindutin ang row para i-edit',
+    inv_fabAddToCategory: 'Magdagdag ng produkto sa {category}',
+    inv_moreActions: 'Iba pang aksyon',
+    inv_suggestedPrefix: 'Mungkahi',
     inv_catBulkHeaderHint:
       'Tip: ang “Ilipat lahat sa walang kategorya” sa taas ay inililipat ang lahat ng produkto dito (maaaring Ibalik agad).',
     inv_catBulkSelectedHint:
@@ -1310,6 +1343,7 @@ export const STRINGS = {
     card_noneYet: 'wala pa',
     card_noActivityYet: 'Wala pang activity',
     card_owes: 'may utang',
+    card_paidUp: 'bayad na',
 
     nf_title: 'Wala dito',
     nf_message: 'Hindi mahanap ang page.',

@@ -1,14 +1,14 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Image, Keyboard, ScrollView, StyleSheet, View } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import { Button, Chip, Text, TextInput } from 'react-native-paper';
+import { Button, Chip, Text, TextInput, useTheme } from 'react-native-paper';
 import { AppConfirmDialog } from '@/components/AppConfirmDialog';
 import { KeyboardAwareOverlayModal } from '@/components/KeyboardAwareOverlayModal';
 import ProductImage from '@/components/ProductImage';
 import { INVENTORY_CATEGORY_PRESET_KEYS } from '@/constants/inventoryCategories';
 import { font } from '@/constants/theme';
 import { useLocale } from '@/contexts/LocaleContext';
-import { useOperationQueue } from '@/contexts/OperationQueueContext';
+import { useSaveOperation } from '@/hooks/useSaveOperation';
 import { useToast } from '@/contexts/ToastContext';
 import { useShopData } from '@/contexts/ShopDataContext';
 import {
@@ -53,16 +53,17 @@ export function InventoryProductEditorModal({
 }) {
   const { t } = useLocale();
   const { showToast } = useToast();
-  const { runOperation } = useOperationQueue();
+  const { save: runSave, isSaving } = useSaveOperation();
+  const theme = useTheme();
   const { inventory, refresh } = useShopData();
   const categoryInputRef = useRef(null);
   const priceInputRef = useRef(null);
   const [name, setName] = useState('');
   const [category, setCategory] = useState('');
   const [unitPriceStr, setUnitPriceStr] = useState('');
-  const [busy, setBusy] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteItem, setDeleteItem] = useState(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
   const [pickedUri, setPickedUri] = useState(null);
   const [clearImage, setClearImage] = useState(false);
   const [discardOpen, setDiscardOpen] = useState(false);
@@ -154,7 +155,7 @@ export function InventoryProductEditorModal({
   };
 
   const close = () => {
-    if (!busy) {
+    if (!isSaving) {
       if (hasChanges()) {
         setDiscardOpen(true);
       } else {
@@ -195,10 +196,13 @@ export function InventoryProductEditorModal({
     if (pickedUri) imagePayload.pickedImageUri = pickedUri;
     if (clearImage && isEditing) imagePayload.clearProductImage = true;
 
-    setBusy(true);
-    onDismiss();
-    void runOperation({
-      label: editingId ? t('inv_editTitle') : t('inv_addTitle'),
+    try {
+      onDismiss();
+    } catch {
+      /* ignore */
+    }
+    void runSave({
+      label: editingId ? t('inv_savingEdit') : t('inv_saving'),
       task: async () => {
         if (editingId) {
           await updateInventoryItem(editingId, {
@@ -218,7 +222,6 @@ export function InventoryProductEditorModal({
         await refresh();
       },
       onSuccess: async () => {
-        Keyboard.dismiss();
         await toastSavedOnDeviceAware(showToast, t, 'toast_productSaved');
         if (onSaved) await onSaved();
       },
@@ -241,7 +244,8 @@ export function InventoryProductEditorModal({
         confirmText={t('common_discard')}
         cancelText={t('common_cancel')}
         destructive
-        confirmDisabled={busy}
+        confirmDisabled={isSaving}
+        confirmLoading={isSaving}
         onCancel={() => {
           setDiscardOpen(false);
         }}
@@ -255,7 +259,7 @@ export function InventoryProductEditorModal({
       <KeyboardAwareOverlayModal
         visible={visible}
         onDismiss={close}
-        dismissable={!busy}
+        dismissable={!isSaving}
         renderContent={({ sheetMaxHeight }) => (
           <ScrollView
             keyboardShouldPersistTaps="handled"
@@ -304,7 +308,7 @@ export function InventoryProductEditorModal({
                   compact
                   style={styles.photoPickerBtn}
                   onPress={pickImageFromLibrary}
-                  disabled={busy}
+                  disabled={isSaving}
                 >
                   {t('inv_photoGallery')}
                 </Button>
@@ -313,7 +317,7 @@ export function InventoryProductEditorModal({
                   compact
                   style={styles.photoPickerBtn}
                   onPress={takePhotoWithCamera}
-                  disabled={busy}
+                  disabled={isSaving}
                 >
                   {t('inv_takePhoto')}
                 </Button>
@@ -326,7 +330,7 @@ export function InventoryProductEditorModal({
                     setPickedUri(null);
                     setClearImage(true);
                   }}
-                  disabled={busy}
+                  disabled={isSaving}
                 >
                   {t('inv_removePhoto')}
                 </Button>
@@ -397,7 +401,7 @@ export function InventoryProductEditorModal({
             style={styles.input}
             returnKeyType="done"
             onSubmitEditing={() => {
-              if (name.trim() && !busy) save();
+              if (name.trim() && !isSaving) save();
             }}
           />
           <Text variant="bodySmall" style={styles.modalHint}>
@@ -412,7 +416,8 @@ export function InventoryProductEditorModal({
                   const item = rows.find((r) => r.id === editingId);
                   if (item) confirmDelete(item);
                 }}
-                disabled={busy}
+                disabled={isSaving || deleteBusy}
+                loading={deleteBusy}
               >
                 {t('inv_deleteA11y')}
               </Button>
@@ -420,14 +425,14 @@ export function InventoryProductEditorModal({
               <View style={styles.spacer} />
             )}
             <View style={styles.actionsRight}>
-              <Button mode="text" onPress={close} disabled={busy}>
+              <Button mode="text" onPress={close} disabled={isSaving}>
                 {t('common_cancel')}
               </Button>
               <Button
                 mode="contained"
                 onPress={save}
-                loading={busy}
-                disabled={busy || !name.trim()}
+                loading={isSaving}
+                disabled={isSaving || !name.trim()}
               >
                 {t('common_save')}
               </Button>
@@ -445,16 +450,18 @@ export function InventoryProductEditorModal({
         cancelText={t('common_cancel')}
         destructive
         useNativeModal
-        confirmDisabled={busy}
+        confirmDisabled={isSaving || deleteBusy}
+        confirmLoading={deleteBusy}
         onCancel={() => {
+          if (deleteBusy) return;
           setDeleteOpen(false);
           setDeleteItem(null);
         }}
         onConfirm={async () => {
           const it = deleteItem;
+          if (!it || deleteBusy) return;
+          setDeleteBusy(true);
           setDeleteOpen(false);
-          setDeleteItem(null);
-          if (!it) return;
           const snap = {
             name: String(it.name || '').trim(),
             category: String(it.category || '').trim(),
@@ -463,6 +470,7 @@ export function InventoryProductEditorModal({
           try {
             await deleteInventoryItem(it.id);
             await refresh();
+            setDeleteItem(null);
             onDismiss();
             const online = await isOnline();
             showToast({
@@ -490,6 +498,8 @@ export function InventoryProductEditorModal({
               type: 'error',
               message: e?.message || t('inv_errDelete'),
             });
+          } finally {
+            setDeleteBusy(false);
           }
         }}
       />
@@ -502,7 +512,8 @@ export function InventoryProductEditorModal({
         cancelText={t('common_cancel')}
         destructive
         useNativeModal
-        confirmDisabled={busy}
+        confirmDisabled={isSaving}
+        confirmLoading={isSaving}
         onCancel={() => {
           setDiscardOpen(false);
         }}

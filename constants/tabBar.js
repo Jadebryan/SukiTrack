@@ -5,7 +5,7 @@
  */
 export function getTabBarOuterHeight(safeBottom) {
   const padBottom = Math.max(safeBottom, 10);
-  const padTop = 6;
-  const row = 52;
+  const padTop = 10;
+  const row = 48;
   return padTop + row + padBottom;
 }

@@ -138,7 +138,6 @@ export function EditUtangEntryModal({
         message={t('tm_discardMsg')}
         confirmText={t('common_discard')}
         cancelText={t('common_cancel')}
-        useNativeModal
         onConfirm={() => {
           setDiscardOpen(false);
           onDismiss();

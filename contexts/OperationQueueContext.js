@@ -7,20 +7,23 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { Animated, StyleSheet, Text, View } from 'react-native';
-import { Portal, useTheme } from 'react-native-paper';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocale } from '@/contexts/LocaleContext';
 import { useToast } from '@/contexts/ToastContext';
 
 const OperationQueueContext = createContext(null);
 
+const CREEP_INTERVAL_MS = 80;
+const CREEP_MAX_FRACTION = 0.9;
+
+/** Queue + global SavingProgress UI. Prefer `useSaveOperation()` in screens and modals. */
 export function OperationQueueProvider({ children }) {
   const { showToast } = useToast();
   const { t } = useLocale();
   const [operations, setOperations] = useState([]);
   const mountedRef = useRef(false);
   const cleanupTimers = useRef([]);
+  const creepTimers = useRef(new Map());
+  const cancelledIds = useRef(new Set());
 
   useEffect(() => {
     mountedRef.current = true;
@@ -28,12 +31,62 @@ export function OperationQueueProvider({ children }) {
       mountedRef.current = false;
       cleanupTimers.current.forEach(clearTimeout);
       cleanupTimers.current = [];
+      creepTimers.current.forEach(clearInterval);
+      creepTimers.current.clear();
     };
   }, []);
 
-  const removeOperation = useCallback((id) => {
-    setOperations((prev) => prev.filter((op) => op.id !== id));
+  const patchOperation = useCallback((id, patch) => {
+    setOperations((prev) =>
+      prev.map((op) => (op.id === id ? { ...op, ...patch } : op))
+    );
   }, []);
+
+  const stopCreep = useCallback((id) => {
+    const timer = creepTimers.current.get(id);
+    if (timer) {
+      clearInterval(timer);
+      creepTimers.current.delete(id);
+    }
+  }, []);
+
+  const startProgressCreep = useCallback(
+    (id) => {
+      stopCreep(id);
+      const startedAt = Date.now();
+      const timer = setInterval(() => {
+        if (!mountedRef.current || cancelledIds.current.has(id)) {
+          stopCreep(id);
+          return;
+        }
+        setOperations((prev) =>
+          prev.map((op) => {
+            if (op.id !== id || op.status !== 'pending') {
+              return op;
+            }
+            const elapsed = Date.now() - startedAt;
+            const eased = 1 - Math.exp(-elapsed / 2200);
+            const fraction = Math.min(
+              CREEP_MAX_FRACTION,
+              0.12 + eased * (CREEP_MAX_FRACTION - 0.12)
+            );
+            return { ...op, fraction };
+          })
+        );
+      }, CREEP_INTERVAL_MS);
+      creepTimers.current.set(id, timer);
+    },
+    [stopCreep]
+  );
+
+  const removeOperation = useCallback(
+    (id) => {
+      stopCreep(id);
+      cancelledIds.current.delete(id);
+      setOperations((prev) => prev.filter((op) => op.id !== id));
+    },
+    [stopCreep]
+  );
 
   const scheduleRemoval = useCallback(
     (id, delay = 4000) => {
@@ -47,6 +100,23 @@ export function OperationQueueProvider({ children }) {
     [removeOperation]
   );
 
+  const cancelAllOperations = useCallback(() => {
+    let hadPending = false;
+    setOperations((prev) => {
+      prev.forEach((op) => {
+        if (op.status === 'pending') {
+          hadPending = true;
+          cancelledIds.current.add(op.id);
+          stopCreep(op.id);
+        }
+      });
+      return prev.filter((op) => op.status !== 'pending');
+    });
+    if (hadPending) {
+      showToast({ type: 'info', message: t('toast_saveCancelled') });
+    }
+  }, [stopCreep, showToast, t]);
+
   const runOperation = useCallback(
     async ({
       label,
@@ -59,7 +129,13 @@ export function OperationQueueProvider({ children }) {
       const id = `op-${Date.now()}-${Math.random().toString(16).slice(2)}`;
       setOperations((prev) => [
         ...prev,
-        { id, label: label || t('common_saving'), status: 'pending', retry: null },
+        {
+          id,
+          label: label || t('common_saving'),
+          status: 'pending',
+          fraction: 0.08,
+          retry: null,
+        },
       ]);
 
       const retry = () =>
@@ -76,19 +152,27 @@ export function OperationQueueProvider({ children }) {
         prev.map((op) => (op.id === id ? { ...op, retry } : op))
       );
 
+      startProgressCreep(id);
+
+      const finishCancelled = () => {
+        stopCreep(id);
+        cancelledIds.current.delete(id);
+        removeOperation(id);
+      };
+
       const complete = () => {
         if (!mountedRef.current) return;
-        setOperations((prev) =>
-          prev.map((op) => (op.id === id ? { ...op, status: 'complete' } : op))
-        );
+        stopCreep(id);
+        patchOperation(id, { status: 'complete', fraction: 1 });
         scheduleRemoval(id, 300);
       };
 
       const fail = (error) => {
         if (!mountedRef.current) return;
+        stopCreep(id);
         setOperations((prev) =>
           prev.map((op) =>
-            op.id === id ? { ...op, status: 'error', error, retry } : op
+            op.id === id ? { ...op, status: 'error', error, retry, fraction: op.fraction ?? 0.5 } : op
           )
         );
         showToast({
@@ -101,13 +185,24 @@ export function OperationQueueProvider({ children }) {
       };
 
       try {
+        patchOperation(id, { fraction: 0.22 });
         const result = await task();
+
+        if (cancelledIds.current.has(id)) {
+          finishCancelled();
+          return undefined;
+        }
+
         complete();
         if (onSuccess) {
           await onSuccess(result);
         }
         return result;
       } catch (error) {
+        if (cancelledIds.current.has(id)) {
+          finishCancelled();
+          return undefined;
+        }
         fail(error);
         if (onFailure) {
           await onFailure(error);
@@ -115,18 +210,25 @@ export function OperationQueueProvider({ children }) {
         throw error;
       }
     },
-    [showToast, scheduleRemoval, t]
+    [
+      showToast,
+      scheduleRemoval,
+      startProgressCreep,
+      stopCreep,
+      patchOperation,
+      removeOperation,
+      t,
+    ]
   );
 
   const value = useMemo(
-    () => ({ operations, runOperation }),
-    [operations, runOperation]
+    () => ({ operations, runOperation, cancelAllOperations }),
+    [operations, runOperation, cancelAllOperations]
   );
 
   return (
     <OperationQueueContext.Provider value={value}>
       {children}
-      <OperationQueueIndicator operations={operations} />
     </OperationQueueContext.Provider>
   );
 }
@@ -138,130 +240,3 @@ export function useOperationQueue() {
   }
   return ctx;
 }
-
-function OperationQueueIndicator({ operations }) {
-  const theme = useTheme();
-  const { t } = useLocale();
-  const insets = useSafeAreaInsets();
-  const progress = useRef(new Animated.Value(0)).current;
-
-  const pending = operations.some((op) => op.status === 'pending');
-  const error = operations.some((op) => op.status === 'error');
-  const complete = operations.some((op) => op.status === 'complete');
-  const active = operations[0];
-
-  useEffect(() => {
-    const animateProgress = () => {
-      progress.setValue(0);
-      return Animated.loop(
-        Animated.timing(progress, {
-          toValue: 1,
-          duration: 1800,
-          useNativeDriver: false,
-        })
-      );
-    };
-
-    let animation;
-    if (pending) {
-      animation = animateProgress();
-      animation.start();
-    } else if (error || complete) {
-      animation = Animated.timing(progress, {
-        toValue: 1,
-        duration: 200,
-        useNativeDriver: false,
-      });
-      animation.start();
-    } else {
-      progress.setValue(0);
-    }
-
-    return () => {
-      animation?.stop();
-    };
-  }, [complete, error, pending, progress]);
-
-  if (!operations.length) {
-    return null;
-  }
-
-  const label =
-    operations.length > 1
-      ? t('common_savingCount', { count: operations.length })
-      : active?.label || t('common_saving');
-
-  const barColor = error ? theme.colors.error : theme.colors.primary;
-
-  const progressWidth = progress.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['0%', '100%'],
-  });
-
-  return (
-    <Portal>
-      <View style={[styles.container, { top: 0 }]}> 
-        <View style={[styles.inner, { paddingTop: insets.top }]}> 
-          <View style={styles.metaRow}>
-            <Text style={[styles.label, { color: theme.colors.onSurface }]}> {label} </Text>
-            {operations.length > 1 ? (
-              <View style={[styles.badge, { backgroundColor: theme.colors.primary }]}> 
-                <Text style={styles.badgeText}>{operations.length}</Text>
-              </View>
-            ) : null}
-          </View>
-          <View style={[styles.barBackground, { backgroundColor: 'rgba(0,0,0,0.08)' }]}> 
-            <Animated.View style={[styles.barFill, { width: progressWidth, backgroundColor: barColor }]} />
-          </View>
-        </View>
-      </View>
-    </Portal>
-  );
-}
-
-const styles = StyleSheet.create({
-  container: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    zIndex: 9999,
-    elevation: 9999,
-  },
-  inner: {
-    paddingHorizontal: 14,
-    paddingBottom: 10,
-    backgroundColor: 'transparent',
-  },
-  metaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 6,
-  },
-  label: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  badge: {
-    minWidth: 24,
-    height: 20,
-    borderRadius: 10,
-    paddingHorizontal: 6,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  badgeText: {
-    fontSize: 12,
-    color: '#fff',
-    fontWeight: '700',
-  },
-  barBackground: {
-    height: 4,
-    borderRadius: 999,
-    overflow: 'hidden',
-    backgroundColor: 'rgba(0,0,0,0.08)',
-  },
-  barFill: {
-    height: '100%',
-  },
-});

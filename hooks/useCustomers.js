@@ -1,7 +1,8 @@
-import { useShopData } from '@/contexts/ShopDataContext';
+import { useShopCustomers, useShopMeta } from '@/contexts/ShopDataContext';
 
 export function useCustomers(ownerId) {
-  const { customers, loading, error, refresh, pendingOutboxCount } = useShopData();
+  const customers = useShopCustomers();
+  const { loading, error, refresh, pendingOutboxCount } = useShopMeta();
   const ready = Boolean(ownerId);
   return {
     customers: ready ? customers : [],

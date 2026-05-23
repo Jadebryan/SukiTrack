@@ -176,12 +176,13 @@ export function TransactionFormModal({
         onDismiss={handleDismiss}
         dismissable={!submitting}
         renderContent={({ sheetMaxHeight }) => (
-        <ScrollView
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-          style={{ maxHeight: sheetMaxHeight }}
-          contentContainerStyle={styles.sheetContent}
-        >
+        <View style={[styles.modalWrapper, { height: sheetMaxHeight }]}> 
+          <ScrollView
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+            style={styles.scrollArea}
+            contentContainerStyle={styles.sheetContent}
+          >
           <Text variant="headlineSmall" style={styles.title}>
             {t('tm_title')}
           </Text>
@@ -318,7 +319,8 @@ export function TransactionFormModal({
             </View>
           ) : null}
 
-          <View style={styles.actions}>
+          </ScrollView>
+          <View style={styles.fixedActions}>
             <Button mode="text" onPress={handleDismiss} disabled={submitting}>
               {t('common_cancel')}
             </Button>
@@ -348,7 +350,7 @@ export function TransactionFormModal({
                 : t('common_save')}
             </Button>
           </View>
-        </ScrollView>
+        </View>
       )}
     />
 
@@ -377,6 +379,7 @@ export function TransactionFormModal({
 const styles = StyleSheet.create({
   sheetContent: {
     padding: 20,
+    paddingBottom: 120,
   },
   title: { fontFamily: font.extraBold },
   hint: { marginTop: 8, marginBottom: 12, opacity: 0.75 },
@@ -410,10 +413,25 @@ const styles = StyleSheet.create({
     borderBottomColor: 'rgba(0,0,0,0.06)',
   },
   previewAmount: { fontFamily: font.bold },
+  modalWrapper: {
+    width: '100%',
+  },
+  scrollArea: {
+    flex: 1,
+  },
   actions: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
     gap: 8,
     marginTop: 8,
+  },
+  fixedActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 8,
+    padding: 16,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0,0,0,0.08)',
+    backgroundColor: 'transparent',
   },
 });

@@ -16,7 +16,7 @@ import { useTheme } from 'react-native-paper';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { AppThemeProvider, useAppTheme } from '@/contexts/AppThemeContext';
 import { LocaleProvider, useLocale } from '@/contexts/LocaleContext';
-import { NotificationProvider } from '@/contexts/NotificationContext';
+import { OperationQueueIndicator } from '@/components/OperationQueueIndicator';
 import { OperationQueueProvider } from '@/contexts/OperationQueueContext';
 import { ShopDataProvider } from '@/contexts/ShopDataContext';
 import {
@@ -104,7 +104,7 @@ function ThemedStack() {
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen
           name="customer/[id]"
-          options={{ headerShown: true, title: t('nav_customer') }}
+          options={{ headerShown: false, title: t('nav_customer') }}
         />
       </Stack>
     </View>
@@ -134,13 +134,12 @@ export default function RootLayout() {
     <AppThemeProvider>
       <LocaleProvider>
         <AuthProvider>
-          <NotificationProvider>
-            <OperationQueueProvider>
-              <DataShell>
-                <ThemedStack />
-              </DataShell>
-            </OperationQueueProvider>
-          </NotificationProvider>
+          <OperationQueueProvider>
+            <DataShell>
+              <ThemedStack />
+            </DataShell>
+            <OperationQueueIndicator />
+          </OperationQueueProvider>
         </AuthProvider>
       </LocaleProvider>
     </AppThemeProvider>

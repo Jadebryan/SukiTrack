@@ -13,6 +13,7 @@ export function AppConfirmDialog({
   destructive = false,
   icon,
   confirmDisabled = false,
+  confirmLoading = false,
   onConfirm,
   onCancel,
   useNativeModal = false,
@@ -25,74 +26,74 @@ export function AppConfirmDialog({
   const iconBg = destructive ? '#fee2e2' : '#e8f5ed';
   const border =
     theme.colors.outlineVariant || theme.colors.outline || '#dde8df';
+  const isBusy = confirmLoading || confirmDisabled;
 
-if (useNativeModal) {
+  if (useNativeModal) {
     return (
       <RNModal
         visible={visible}
         transparent
         animationType="fade"
         statusBarTranslucent
-        onRequestClose={onCancel}
+        onRequestClose={isBusy ? undefined : onCancel}
       >
         <View style={styles.nativeModalRoot}>
           <Pressable
             style={StyleSheet.absoluteFillObject}
-            onPress={onCancel}
+            onPress={isBusy ? undefined : onCancel}
           />
-          <View style={styles.nativeModalContainer}>
-            <Dialog
-              visible={visible}
-              onDismiss={onCancel}
-              style={[
-                styles.dialog,
-                {
-                  backgroundColor: theme.colors.surface,
-                  borderColor: border,
-                },
-              ]}
-            >
-              <View style={styles.head}>
-                <View style={[styles.iconBubble, { backgroundColor: iconBg }]}> 
-                  <MaterialCommunityIcons name={iconName} size={20} color={iconFg} />
-                </View>
-                <Text
-                  variant="headlineSmall"
-                  accessibilityRole="header"
-                  style={[styles.title, { color: theme.colors.onSurface }]}
-                  numberOfLines={3}
-                >
-                  {title}
-                </Text>
+          <Dialog
+            visible={visible}
+            onDismiss={isBusy ? undefined : onCancel}
+            style={[
+              styles.dialog,
+              {
+                backgroundColor: theme.colors.surface,
+                borderColor: border,
+              },
+            ]}
+          >
+            <View style={styles.head}>
+              <View style={[styles.iconBubble, { backgroundColor: iconBg }]}> 
+                <MaterialCommunityIcons name={iconName} size={20} color={iconFg} />
               </View>
-              <Dialog.Content style={styles.content}>
-                <Text style={[styles.msg, { color: theme.colors.onSurfaceVariant }]}> 
-                  {message}
-                </Text>
-              </Dialog.Content>
-              <Dialog.Actions style={styles.actions}>
-                <View style={styles.btnRow}>
-                  <Button
-                    mode="outlined"
-                    onPress={onCancel}
-                    style={[styles.cancelBtn, { borderColor: border }]}
-                    textColor={confirmColor}
-                    disabled={confirmDisabled}
-                  >
-                    {cancelText}
-                  </Button>
-                  <Button
-                    mode="contained"
-                    onPress={onConfirm}
-                    style={[styles.confirmBtn, { backgroundColor: confirmColor }]}
-                    disabled={confirmDisabled}
-                  >
-                    {confirmText}
-                  </Button>
-                </View>
-              </Dialog.Actions>
-            </Dialog>
-          </View>
+              <Text
+                variant="headlineSmall"
+                accessibilityRole="header"
+                style={[styles.title, { color: theme.colors.onSurface }]}
+                numberOfLines={3}
+              >
+                {title}
+              </Text>
+            </View>
+            <Dialog.Content style={styles.content}>
+              <Text style={[styles.msg, { color: theme.colors.onSurfaceVariant }]}> 
+                {message}
+              </Text>
+            </Dialog.Content>
+            <Dialog.Actions style={styles.actions}>
+              <View style={styles.btnRow}>
+                <Button
+                  mode="outlined"
+                  onPress={onCancel}
+                  style={[styles.cancelBtn, { borderColor: border }]}
+                  textColor={confirmColor}
+                  disabled={isBusy}
+                >
+                  {cancelText}
+                </Button>
+                <Button
+                  mode="contained"
+                  onPress={onConfirm}
+                  style={[styles.confirmBtn, { backgroundColor: confirmColor }]}
+                  disabled={isBusy}
+                  loading={confirmLoading}
+                >
+                  {confirmText}
+                </Button>
+              </View>
+            </Dialog.Actions>
+          </Dialog>
         </View>
       </RNModal>
     );
@@ -102,7 +103,7 @@ if (useNativeModal) {
     <Portal>
       <Dialog
         visible={visible}
-        onDismiss={onCancel}
+        onDismiss={isBusy ? undefined : onCancel}
         style={[
           styles.dialog,
           {
@@ -112,7 +113,7 @@ if (useNativeModal) {
         ]}
       >
         <View style={styles.head}>
-          <View style={[styles.iconBubble, { backgroundColor: iconBg }]}>
+          <View style={[styles.iconBubble, { backgroundColor: iconBg }]}> 
             <MaterialCommunityIcons name={iconName} size={20} color={iconFg} />
           </View>
           <Text
@@ -125,7 +126,7 @@ if (useNativeModal) {
           </Text>
         </View>
         <Dialog.Content style={styles.content}>
-          <Text style={[styles.msg, { color: theme.colors.onSurfaceVariant }]}>
+          <Text style={[styles.msg, { color: theme.colors.onSurfaceVariant }]}> 
             {message}
           </Text>
         </Dialog.Content>
@@ -136,7 +137,7 @@ if (useNativeModal) {
               onPress={onCancel}
               style={[styles.cancelBtn, { borderColor: border }]}
               textColor={confirmColor}
-              disabled={confirmDisabled}
+              disabled={isBusy}
             >
               {cancelText}
             </Button>
@@ -144,7 +145,8 @@ if (useNativeModal) {
               mode="contained"
               onPress={onConfirm}
               style={[styles.confirmBtn, { backgroundColor: confirmColor }]}
-              disabled={confirmDisabled}
+              disabled={isBusy}
+              loading={confirmLoading}
             >
               {confirmText}
             </Button>

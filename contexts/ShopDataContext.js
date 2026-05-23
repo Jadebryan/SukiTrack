@@ -1,6 +1,7 @@
 import NetInfo from '@react-native-community/netinfo';
 import React, {
   createContext,
+  startTransition,
   useCallback,
   useContext,
   useEffect,
@@ -17,34 +18,14 @@ import { loadOutbox } from '@/services/outboxService';
 import { processOutbox } from '@/services/syncOutbox';
 import { setShopCacheListener } from '@/services/shopCacheNotify';
 import { mergeBootstrapWithLocalInventoryImages } from '@/utils/shopPayloadMerge';
+import { prepareShopPayload } from '@/utils/prepareShopPayload';
 
-const ShopDataContext = createContext(null);
+const ShopMetaContext = createContext(null);
+const ShopCustomersContext = createContext([]);
+const ShopPagesContext = createContext([]);
+const ShopInventoryContext = createContext([]);
 
 const POLL_MS = 22000;
-
-function sortCustomers(rows) {
-  return [...rows].sort((a, b) =>
-    String(a.name || '').localeCompare(String(b.name || ''), 'en', {
-      sensitivity: 'base',
-    })
-  );
-}
-
-function sortPages(rows) {
-  return [...rows].sort((a, b) => {
-    const ta = new Date(a.updatedAt || a.createdAt || 0).getTime();
-    const tb = new Date(b.updatedAt || b.createdAt || 0).getTime();
-    return tb - ta;
-  });
-}
-
-function sortInventory(rows) {
-  return [...rows].sort((a, b) =>
-    String(a.name || '').localeCompare(String(b.name || ''), 'en', {
-      sensitivity: 'base',
-    })
-  );
-}
 
 export function ShopDataProvider({ ownerId, children }) {
   const [customers, setCustomers] = useState([]);
@@ -66,20 +47,12 @@ export function ShopDataProvider({ ownerId, children }) {
 
   const applyPayload = useCallback((payload) => {
     if (!payload) return;
-    setCustomers(sortCustomers(payload.customers || []));
-    setPages(sortPages(payload.pages || []));
-    const locals = payload.inventoryLocalImages || {};
-    setInventory(
-      sortInventory(
-        (payload.inventory || []).map((row) => ({
-          ...row,
-          imageLocalUri:
-            row.imageUrl && /^https:\/\//i.test(String(row.imageUrl).trim())
-              ? null
-              : locals[row.id] || null,
-        }))
-      )
-    );
+    const prepared = prepareShopPayload(payload);
+    setCustomers(prepared.customers);
+    startTransition(() => {
+      setInventory(prepared.inventory);
+      setPages(prepared.pages);
+    });
   }, []);
 
   const refresh = useCallback(async () => {
@@ -269,28 +242,59 @@ export function ShopDataProvider({ ownerId, children }) {
     };
   }, [ownerId, applyPayload, bumpPending]);
 
-  const value = useMemo(
+  const metaValue = useMemo(
     () => ({
-      customers,
-      pages,
-      inventory,
       loading,
       error,
       refresh,
       pendingOutboxCount,
     }),
-    [customers, pages, inventory, loading, error, refresh, pendingOutboxCount]
+    [loading, error, refresh, pendingOutboxCount]
   );
 
   return (
-    <ShopDataContext.Provider value={value}>{children}</ShopDataContext.Provider>
+    <ShopMetaContext.Provider value={metaValue}>
+      <ShopCustomersContext.Provider value={customers}>
+        <ShopPagesContext.Provider value={pages}>
+          <ShopInventoryContext.Provider value={inventory}>
+            {children}
+          </ShopInventoryContext.Provider>
+        </ShopPagesContext.Provider>
+      </ShopCustomersContext.Provider>
+    </ShopMetaContext.Provider>
   );
 }
 
-export function useShopData() {
-  const ctx = useContext(ShopDataContext);
+export function useShopMeta() {
+  const ctx = useContext(ShopMetaContext);
   if (!ctx) {
-    throw new Error('useShopData must be used within ShopDataProvider');
+    throw new Error('useShopMeta must be used within ShopDataProvider');
   }
   return ctx;
+}
+
+export function useShopCustomers() {
+  return useContext(ShopCustomersContext);
+}
+
+export function useShopPages() {
+  return useContext(ShopPagesContext);
+}
+
+export function useShopInventory() {
+  return useContext(ShopInventoryContext);
+}
+
+/** Full shop snapshot — prefer slice hooks on Home / Inventory for fewer re-renders. */
+export function useShopData() {
+  const meta = useShopMeta();
+  const customers = useShopCustomers();
+  const pages = useShopPages();
+  const inventory = useShopInventory();
+  return {
+    ...meta,
+    customers,
+    pages,
+    inventory,
+  };
 }

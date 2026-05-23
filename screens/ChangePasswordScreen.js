@@ -10,6 +10,9 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useLocale } from '@/contexts/LocaleContext';
 import { useSensitiveScreenCapture } from '@/hooks/useSensitiveScreenCapture';
 import * as authApi from '@/services/authApi';
+import { safeRouterBack } from '@/utils/safeRouterBack';
+
+const backToSettings = (router) => safeRouterBack(router, '/(tabs)/settings');
 
 export function ChangePasswordScreen() {
   useSensitiveScreenCapture(true);
@@ -38,7 +41,7 @@ export function ChangePasswordScreen() {
           contentContainerStyle={[styles.pad, { paddingTop: topPadding }]}
         >
           <View style={styles.topbar}>
-            <AppBackButton onPress={() => router.back()} accessibilityLabel={t('nav_back')} />
+            <AppBackButton onPress={() => backToSettings(router)} accessibilityLabel={t('nav_back')} />
             <Text style={styles.pageTitle}>{t('cp_title')}</Text>
             <View style={{ width: 36, height: 36 }} />
           </View>
@@ -50,7 +53,7 @@ export function ChangePasswordScreen() {
             <Text style={styles.stateTitle}>{t('cp_needSession')}</Text>
             <Button
               mode="contained"
-              onPress={() => router.back()}
+              onPress={() => backToSettings(router)}
               style={styles.primaryBtn}
               contentStyle={styles.primaryBtnContent}
             >
@@ -116,7 +119,7 @@ export function ChangePasswordScreen() {
           contentContainerStyle={[styles.pad, { paddingTop: topPadding }]}
         >
           <View style={styles.topbar}>
-            <AppBackButton onPress={() => router.back()} accessibilityLabel={t('nav_back')} />
+            <AppBackButton onPress={() => backToSettings(router)} accessibilityLabel={t('nav_back')} />
             <Text style={styles.pageTitle}>{t('cp_title')}</Text>
             <View style={{ width: 36, height: 36 }} />
           </View>
@@ -128,7 +131,7 @@ export function ChangePasswordScreen() {
             <Text style={styles.stateTitle}>{t('cp_done')}</Text>
             <Button
               mode="contained"
-              onPress={() => router.back()}
+              onPress={() => backToSettings(router)}
               style={styles.primaryBtn}
               contentStyle={styles.primaryBtnContent}
             >
@@ -159,7 +162,7 @@ export function ChangePasswordScreen() {
         keyboardShouldPersistTaps="handled"
       >
         <View style={styles.topbar}>
-          <AppBackButton onPress={() => router.back()} accessibilityLabel={t('nav_back')} />
+          <AppBackButton onPress={() => backToSettings(router)} accessibilityLabel={t('nav_back')} />
           <Text style={styles.pageTitle}>{t('cp_title')}</Text>
           <View style={{ width: 36, height: 36 }} />
         </View>
@@ -225,7 +228,7 @@ export function ChangePasswordScreen() {
             {t('cp_submit')}
           </Button>
 
-          <Pressable onPress={() => router.back()} style={styles.cancelLink}>
+          <Pressable onPress={() => backToSettings(router)} style={styles.cancelLink}>
             <Text style={styles.cancelText}>{t('common_cancel')}</Text>
           </Pressable>
         </View>

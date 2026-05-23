@@ -6,7 +6,7 @@ import { AppConfirmDialog } from '@/components/AppConfirmDialog';
 import { font } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLocale } from '@/contexts/LocaleContext';
-import { useOperationQueue } from '@/contexts/OperationQueueContext';
+import { useSaveOperation } from '@/hooks/useSaveOperation';
 import { useToast } from '@/contexts/ToastContext';
 import { useShopData } from '@/contexts/ShopDataContext';
 import { updateCustomer } from '@/services/customersService';
@@ -26,13 +26,12 @@ import {
 export function EditCustomerModal({ visible, onDismiss, customer }) {
   const { t } = useLocale();
   const { showToast } = useToast();
-  const { runOperation } = useOperationQueue();
+  const { save: runSave } = useSaveOperation();
   const { user } = useAuth();
   const { refresh, customers } = useShopData();
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [address, setAddress] = useState('');
-  const [busy, setBusy] = useState(false);
   const [discardOpen, setDiscardOpen] = useState(false);
 
   useEffect(() => {
@@ -46,7 +45,6 @@ export function EditCustomerModal({ visible, onDismiss, customer }) {
   const normalize = (value) => String(value || '').toLowerCase().trim();
 
   const close = () => {
-    if (busy) return;
     const dirty =
       String(name || '') !== String(customer?.name || '') ||
       String(phone || '') !== String(customer?.phone || '') ||
@@ -65,9 +63,8 @@ export function EditCustomerModal({ visible, onDismiss, customer }) {
       showToast({ type: 'error', message: t('ac_dupName') });
       return;
     }
-    setBusy(true);
     onDismiss();
-    void runOperation({
+    void runSave({
       label: t('common_customer'),
       task: async () => {
         await updateCustomer(user.ownerId, customer.id, {
@@ -76,6 +73,8 @@ export function EditCustomerModal({ visible, onDismiss, customer }) {
           address,
         });
         await refresh();
+      },
+      onSuccess: async () => {
         await toastSavedOnDeviceAware(showToast, t, 'toast_customerUpdated');
       },
       toastErrorMessage: t('cd_updateErr'),
@@ -88,7 +87,7 @@ export function EditCustomerModal({ visible, onDismiss, customer }) {
       <KeyboardAwareOverlayModal
         visible={visible}
         onDismiss={close}
-        dismissable={!busy}
+        dismissable
         renderContent={({ sheetMaxHeight }) => (
           <ScrollView
             keyboardShouldPersistTaps="handled"
@@ -123,14 +122,13 @@ export function EditCustomerModal({ visible, onDismiss, customer }) {
               style={styles.input}
             />
             <View style={styles.actions}>
-              <Button mode="text" onPress={close} disabled={busy}>
+              <Button mode="text" onPress={close}>
                 {t('common_cancel')}
               </Button>
               <Button
                 mode="contained"
                 onPress={save}
-                loading={busy}
-                disabled={busy || !name.trim()}
+                disabled={!name.trim()}
               >
                 {t('common_save')}
               </Button>
@@ -145,7 +143,6 @@ export function EditCustomerModal({ visible, onDismiss, customer }) {
         message={t('tm_discardMsg')}
         confirmText={t('common_discard')}
         cancelText={t('common_cancel')}
-        useNativeModal
         onConfirm={() => {
           setDiscardOpen(false);
           onDismiss();

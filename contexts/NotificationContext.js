@@ -1,9 +1,21 @@
 import React, { useEffect, useRef } from 'react';
-import * as Notifications from 'expo-notifications';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
 import * as notificationApi from '@/services/notificationApi';
 import * as notificationService from '@/services/notificationService';
+
+let Notifications = null;
+
+function getNotifications() {
+  if (Notifications === null) {
+    try {
+      Notifications = require('expo-notifications');
+    } catch (error) {
+      return null;
+    }
+  }
+  return Notifications;
+}
 
 export function NotificationProvider({ children }) {
   const { user } = useAuth();
@@ -12,7 +24,12 @@ export function NotificationProvider({ children }) {
   const responseListener = useRef(null);
 
   useEffect(() => {
-    receivedListener.current = Notifications.addNotificationReceivedListener(
+    const Notif = getNotifications();
+    if (!Notif) {
+      return;
+    }
+
+    receivedListener.current = Notif.addNotificationReceivedListener(
       (notification) => {
         const title = notification.request.content.title || undefined;
         const body = notification.request.content.body || '';
@@ -22,7 +39,7 @@ export function NotificationProvider({ children }) {
       }
     );
 
-    responseListener.current = Notifications.addNotificationResponseReceivedListener(
+    responseListener.current = Notif.addNotificationResponseReceivedListener(
       () => {
         // Tapping the system notification is handled by the OS / router.
       }
