@@ -168,14 +168,19 @@ export function HomeNotificationDialog({ visible, onDismiss }) {
 }
 
 const styles = StyleSheet.create({
-  notifDialog: { borderRadius: 18, alignSelf: 'center', width: '92%', maxWidth: 480 },
+  notifDialog: {
+    borderRadius: 20,
+    alignSelf: 'center',
+    width: '92%',
+    maxWidth: 480,
+  },
   notifHead: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    paddingHorizontal: 16,
+    paddingHorizontal: 18,
     paddingTop: 14,
-    paddingBottom: 10,
+    paddingBottom: 12,
   },
   notifIcon: {
     width: 34,

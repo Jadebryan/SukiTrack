@@ -57,6 +57,7 @@ function ThemedStack() {
         screenOptions={{
           ...headerOptions,
           contentStyle: getStackContentStyle(theme, isDark),
+          animation: 'fade_from_bottom',
         }}
       >
         <Stack.Screen name="index" options={{ headerShown: false }} />

@@ -21,7 +21,10 @@ export function InventoryCategoryListHeader({
   selectionMode,
   selectedCount,
   showSelectButton,
+  showSelectAll,
+  allSelected,
   onToggleSelectMode,
+  onSelectAll,
   onAddProduct,
   showAddButton,
 }) {
@@ -115,6 +118,27 @@ export function InventoryCategoryListHeader({
             >
               <MaterialCommunityIcons name="plus" size={18} color="#FFFFFF" />
               <Text style={styles.addBtnText}>{t('inv_add')}</Text>
+            </Pressable>
+          ) : null}
+          {selectionMode && showSelectAll ? (
+            <Pressable
+              onPress={onSelectAll}
+              style={({ pressed }) => [
+                styles.selectBtn,
+                {
+                  backgroundColor: colors.green50,
+                  borderColor: colors.green100,
+                },
+                pressed && styles.pressed,
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel={
+                allSelected ? t('inv_deselectAll') : t('inv_selectAll')
+              }
+            >
+              <Text style={[styles.selectBtnText, { color: colors.green700 }]}> 
+                {allSelected ? t('inv_deselectAll') : t('inv_selectAll')}
+              </Text>
             </Pressable>
           ) : null}
           {showSelectButton ? (

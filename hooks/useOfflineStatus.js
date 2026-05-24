@@ -6,7 +6,9 @@ export function useOfflineStatus() {
 
   useEffect(() => {
     const sub = NetInfo.addEventListener((state) => {
-      setIsOffline(state.isConnected === false);
+      const offline =
+        state.isConnected === false || state.isInternetReachable === false;
+      setIsOffline(offline);
     });
     return () => sub();
   }, []);

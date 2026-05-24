@@ -10,7 +10,10 @@ import React, {
 import { FlatList, RefreshControl, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getTabBarOuterHeight } from '@/constants/tabBar';
+import { Text } from 'react-native'; // Added Text import
+import { IconButton } from 'react-native-paper'; // Added IconButton import
 import { AddCustomerModal } from '@/components/AddCustomerModal';
+import { AppConfirmDialog } from '@/components/AppConfirmDialog';
 import { HomeNotificationDialog } from '@/components/HomeNotificationDialog';
 import HomeCustomerRow from '@/components/HomeCustomerRow';
 import { EmptyState } from '@/components/EmptyState';
@@ -20,14 +23,17 @@ import { SpeedDialFab } from '@/components/SpeedDialFab';
 import { HomeListHeader } from '@/components/home/HomeListHeader';
 import { HomeSectionHeader } from '@/components/home/HomeSectionHeader';
 import { getHomePalette } from '@/constants/homePalette';
+import { font } from '@/constants/theme';
 import { useAppTheme } from '@/contexts/AppThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLocale } from '@/contexts/LocaleContext';
 import { useToast } from '@/contexts/ToastContext';
 import { useCustomers } from '@/hooks/useCustomers';
+import { useSaveOperation } from '@/hooks/useSaveOperation';
 import { useKeyboardHeight } from '@/hooks/useKeyboardHeight';
 import { useOfflineStatus } from '@/hooks/useOfflineStatus';
 import { buildCustomerListData } from '@/utils/buildCustomerListData';
+import { deleteCustomer } from '@/services/customersService';
 import {
   getAndClearPendingOpenAddCustomer,
   getBackupReminderDismissedAt,
@@ -58,10 +64,40 @@ export function HomeScreen() {
   const [notifOpen, setNotifOpen] = useState(false);
   const [speedDialOpen, setSpeedDialOpen] = useState(false);
   const [recentIds, setRecentIds] = useState([]);
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [bulkDeleteConfirmOpen, setBulkDeleteConfirmOpen] = useState(false);
+  const [bulkDeleteBusy, setBulkDeleteBusy] = useState(false);
+  const pendingBulkSnapshotRef = useRef([]);
+  const { save: runSave } = useSaveOperation();
   const [navTipsVisible, setNavTipsVisible] = useState(false);
   const isOffline = useOfflineStatus();
   const keyboardPad = useKeyboardHeight(true);
   const tabBarOuter = getTabBarOuterHeight(insets.bottom);
+
+  const previousConnectionRef = useRef({
+    isOffline,
+    pendingOutboxCount,
+  });
+
+  useEffect(() => {
+    const prev = previousConnectionRef.current;
+    const becameOffline = prev.isOffline !== isOffline;
+    const pendingChanged = prev.pendingOutboxCount !== pendingOutboxCount;
+    previousConnectionRef.current = { isOffline, pendingOutboxCount };
+
+    if (becameOffline) {
+      showToast({
+        type: isOffline ? 'warning' : 'info',
+        message: isOffline ? t('toast_offlineLost') : t('toast_offlineRestored'),
+        durationMs: 5000,
+      });
+    }
+
+    if (!offlineBanner && (becameOffline || pendingChanged)) {
+      setOfflineBanner(true);
+    }
+  }, [isOffline, pendingOutboxCount, offlineBanner, showToast, t]);
 
   useFocusEffect(
     useCallback(() => {
@@ -103,8 +139,9 @@ export function HomeScreen() {
         if (cancelled) return;
         const now = Date.now();
         const fourteenDays = 14 * 24 * 60 * 60 * 1000;
-        const sevenDays = 7 * 24 * 60 * 60 * 1000;
-        if (dismissedAt && now - dismissedAt < sevenDays) return;
+        // only suppress the backup reminder for one day after user taps "Remind me later"
+        const oneDay = 24 * 60 * 60 * 1000;
+        if (dismissedAt && now - dismissedAt < oneDay) return;
         let stale = false;
         if (!lastIso || !String(lastIso).trim()) stale = true;
         else {
@@ -203,6 +240,63 @@ export function HomeScreen() {
     [router]
   );
 
+  const resetSelection = useCallback(() => {
+    setSelectionMode(false);
+    setSelectedIds([]);
+  }, []);
+
+  const toggleRowSelection = useCallback((id) => {
+    setSelectedIds((prev) => {
+      const next = prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id];
+      if (next.length === 0) setSelectionMode(false);
+      return next;
+    });
+  }, []);
+
+  const openBulkSelectMode = useCallback(() => {
+    setSelectionMode(true);
+    setSelectedIds([]);
+  }, []);
+
+  const openBulkDeleteSelectedFlow = useCallback(() => {
+    pendingBulkSnapshotRef.current = customers.filter((c) => selectedIds.includes(c.id));
+    setBulkDeleteConfirmOpen(true);
+  }, [customers, selectedIds]);
+
+  const runBulkDelete = useCallback(async (snapshot) => {
+    if (!user?.ownerId || !snapshot?.length) return;
+    setBulkDeleteBusy(true);
+    try {
+      if (runSave && typeof runSave === 'function') {
+        await runSave({
+          label: t('home_bulkDelete'),
+          toastErrorMessage: t('common_error'),
+          retryLabel: t('common_retry'),
+          task: async () => {
+            for (const c of snapshot) {
+              // deleteCustomer handles offline/outbox
+              // eslint-disable-next-line no-await-in-loop
+              await deleteCustomer(user.ownerId, c.id);
+            }
+          },
+        });
+      } else {
+        for (const c of snapshot) {
+          // eslint-disable-next-line no-await-in-loop
+          await deleteCustomer(user.ownerId, c.id);
+        }
+      }
+      showToast({ type: 'success', message: t('home_bulkDeleteDone', { count: snapshot.length }) });
+    } catch (err) {
+      showToast({ type: 'error', message: t('common_error') });
+    } finally {
+      setBulkDeleteBusy(false);
+      pendingBulkSnapshotRef.current = [];
+      resetSelection();
+      await refresh();
+    }
+  }, [user?.ownerId, runSave, t, showToast, resetSelection, refresh]);
+
   const keyExtractor = useCallback(
     (item, idx) => (item?.__kind ? `sec-${item.id}` : item?.id || String(idx)),
     []
@@ -237,10 +331,27 @@ export function HomeScreen() {
           customer={item}
           onCustomerPress={onCustomerPress}
           colors={homeColors}
+          selectionMode={selectionMode}
+          selected={selectedIds.includes(item.id)}
+          onToggleSelect={toggleRowSelection}
+          onLongPress={(id) => {
+            if (!selectionMode) {
+              setSelectionMode(true);
+              setSelectedIds([id]);
+            }
+          }}
         />
       );
     },
-    [t, outstandingCount, onCustomerPress, homeColors]
+    [
+      t,
+      outstandingCount,
+      onCustomerPress,
+      homeColors,
+      selectionMode,
+      selectedIds,
+      toggleRowSelection,
+    ]
   );
 
   const onRefresh = useCallback(async () => {
@@ -375,6 +486,45 @@ export function HomeScreen() {
         accessibilityLabelExpanded={t('home_fabQuickCloseA11y')}
       />
 
+      {selectionMode ? (
+        <View
+          style={[
+            styles.bulkSelectionBar,
+            { bottom: tabBarOuter + 12, borderColor: homeColors.border, backgroundColor: homeColors.cardBg },
+          ]}
+        >
+          <Text style={[styles.selectionLabel, { color: homeColors.text }]}> {t('home_sectionCustomerCount', { count: selectedIds.length })} </Text>
+          <View style={styles.selectionActions}>
+            <IconButton
+              icon="trash-can"
+              size={20}
+              onPress={openBulkDeleteSelectedFlow}
+              disabled={!selectedIds.length}
+              accessibilityLabel={t('common_delete')}
+              style={{ marginRight: 8 }}
+            />
+            <IconButton icon="close" size={20} onPress={resetSelection} accessibilityLabel={t('common_cancel')} />
+          </View>
+        </View>
+      ) : null}
+
+      <AppConfirmDialog
+        visible={bulkDeleteConfirmOpen}
+        title={t('home_bulkDelete')}
+        message={t('home_bulkDeleteMsg', { count: selectedIds.length })}
+        cancelText={t('common_cancel')}
+        confirmText={t('common_delete')}
+        destructive
+        confirmLoading={bulkDeleteBusy}
+        onCancel={() => setBulkDeleteConfirmOpen(false)}
+        onConfirm={async () => {
+          const snap = pendingBulkSnapshotRef.current;
+          setBulkDeleteConfirmOpen(false);
+          if (!snap?.length) return;
+          await runBulkDelete(snap);
+        }}
+      />
+
       <AddCustomerModal
         visible={addCustomerOpen}
         onDismiss={() => setAddCustomerOpen(false)}
@@ -390,4 +540,18 @@ export function HomeScreen() {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
+  bulkSelectionBar: {
+    position: 'absolute',
+    left: 16,
+    right: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  selectionLabel: { fontFamily: font.extraBold },
+  selectionActions: { flexDirection: 'row', alignItems: 'center' },
 });

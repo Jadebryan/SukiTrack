@@ -14,6 +14,7 @@ export const STRINGS = {
     common_ok: 'OK',
     common_yes: 'Yes',
     common_no: 'No',
+    common_delete: 'Delete',
     common_undo: 'Undo',
     common_discard: 'Discard',
     common_item: 'Item',
@@ -38,6 +39,8 @@ export const STRINGS = {
     toast_productSaved: 'Product saved.',
     toast_productDeleted: 'Product removed.',
     toast_exportReady: 'Export ready — pick an app to share.',
+    toast_syncDone: 'Sync complete. Latest server data loaded.',
+    toast_syncFailed: 'Sync failed. Please try again.',
     toast_emailCopied: 'Email copied to clipboard.',
     toast_saveFailedRetry: 'Failed to save. Tap to retry.',
     toast_saveCancelled: 'Save cancelled.',
@@ -255,6 +258,9 @@ export const STRINGS = {
     home_chipAll: 'All',
     home_chipPaidUp: 'Paid up',
     home_chipRecent: 'Recent',
+    home_bulkDelete: 'Delete selected customers',
+    home_bulkDeleteDone: '{count} customer(s) deleted.',
+    home_bulkDeleteMsg: 'Delete {count} selected customer(s)?',
     home_sectionOutstanding: 'Outstanding',
     home_sectionAllCustomers: 'All Customers',
     home_notifTitle: 'Notifications',
@@ -473,6 +479,7 @@ export const STRINGS = {
       'Toggle to show only category tiles that have products, then scroll to the grid.',
     inv_newCategoryBtn: 'New category',
     inv_newCategoryTitle: 'Add category',
+    inv_newCategorySaved: 'Category added.',
     inv_newCategoryDesc:
       'It will appear as a tile on this screen so you can open it and add products.',
     inv_newCategoryDatamuseNote:
@@ -515,6 +522,8 @@ export const STRINGS = {
     inv_catBulkSelectedHint:
       'Select products to move or uncategorize them in bulk.',
     inv_bulkSelect: 'Select products',
+    inv_selectAll: 'Select all',
+    inv_deselectAll: 'Deselect all',
     inv_bulkSelectedCount: '{count} selected',
     inv_bulkMove: 'Move',
     inv_bulkMoveTitle: 'Move selected products',
@@ -542,6 +551,13 @@ export const STRINGS = {
     inv_bulkUncatHeader: 'Uncategorize all',
     inv_undoProductRestored: 'Product restored.',
     inv_undoProductFail: 'Could not restore that product.',
+    inv_bulkDeleteTitle: 'Delete selected products?',
+    inv_bulkDeleteMsg:
+      'Delete {count} selected product(s) from “{category}”? You can tap Undo on the next message.',
+    inv_bulkDeleteConfirm: 'Delete',
+    inv_bulkDeleteToast: '{count} product(s) deleted.',
+    inv_bulkDeleteUndoDone: 'Products were restored.',
+    inv_bulkDeleteUndoFail: 'Could not restore deleted products. Try again manually.',
 
     // Settings
     settings_data: 'Data',
@@ -552,6 +568,8 @@ export const STRINGS = {
     settings_accountNoEmail: 'unknown email',
     settings_exportTitle: 'Export data (JSON)',
     settings_exportDesc: 'Share via Drive, email, etc.',
+    settings_syncTitle: 'Sync data',
+    settings_syncDesc: 'Upload local changes and refresh the latest server data.',
     settings_datamusePrivacy:
       'Inventory “smart icons”: when you add a custom category while online, the category name may be sent over HTTPS to Datamuse (third party) to suggest a related word list — only the name, not your whole catalog.',
     settings_backupTitle: 'Backup reminder',
@@ -643,6 +661,9 @@ export const STRINGS = {
       'Stay online — we sync automatically. Pull down on Customers to retry.',
     offline_payNeedsItems: 'Add at least one utang item before recording a payment.',
     toast_editsQueued: 'Saved on this device. Will sync when you’re online.',
+    toast_offlineLost:
+      'No internet connection. Changes will upload when you’re back online.',
+    toast_offlineRestored: 'Back online. Sync will resume automatically.',
 
     // Customer card
     card_lastTx: 'Last activity:',
@@ -713,6 +734,7 @@ export const STRINGS = {
     common_ok: 'Sige',
     common_yes: 'Oo',
     common_no: 'Hindi',
+    common_delete: 'Tanggalin',
     common_undo: 'Ibalik',
     common_discard: 'I-discard',
     common_item: 'Item',
@@ -737,6 +759,8 @@ export const STRINGS = {
     toast_productSaved: 'Na-save ang produkto.',
     toast_productDeleted: 'Naalis ang produkto.',
     toast_exportReady: 'Handa na ang export — pumili kung saan i-share.',
+    toast_syncDone: 'Tapos na ang sync. Na-load ang pinakabagong data mula sa server.',
+    toast_syncFailed: 'Nabigo ang sync. Subukan muli.',
     toast_emailCopied: 'Nakopya ang email sa clipboard.',
     toast_saveFailedRetry: 'Hindi na-save. Pindutin upang subukang muli.',
     toast_saveCancelled: 'Kinansela ang pag-save.',
@@ -1169,6 +1193,7 @@ export const STRINGS = {
       'I-toggle para ipakita lang ang mga uri na may produkto, tapos mag-scroll sa grid.',
     inv_newCategoryBtn: 'Bagong kategorya',
     inv_newCategoryTitle: 'Magdagdag ng kategorya',
+    inv_newCategorySaved: 'Nagdagdag ng kategorya.',
     inv_newCategoryDesc:
       'Lalabas ito bilang card dito para mabuksan mo at magdagdag ng produkto.',
     inv_newCategoryDatamuseNote:
@@ -1212,6 +1237,8 @@ export const STRINGS = {
     inv_catBulkSelectedHint:
       'Piliin ang mga produkto para sabay-sabay ilipat o tanggalin ang kategorya.',
     inv_bulkSelect: 'Piliin ang mga produkto',
+    inv_selectAll: 'Piliin lahat',
+    inv_deselectAll: 'Alisin ang pagpili lahat',
     inv_bulkSelectedCount: '{count} napili',
     inv_bulkMove: 'Ilipat',
     inv_bulkMoveTitle: 'Ilipat ang napiling produkto',
@@ -1248,6 +1275,8 @@ export const STRINGS = {
     settings_accountNoEmail: 'walang email',
     settings_exportTitle: 'I-export ang data (JSON)',
     settings_exportDesc: 'I-share sa Messenger, Drive, atbp.',
+    settings_syncTitle: 'I-sync ang data',
+    settings_syncDesc: 'I-upload ang lokal na pagbabago at i-refresh ang pinakabagong server data.',
     settings_datamusePrivacy:
       '“Smart icons” sa imbentaryo: kapag nagdagdag ng custom na kategorya habang online, maaaring ipadala ang pangalan ng kategorya (HTTPS) sa Datamuse (third party) para sa kaugnay na salita — pangalan lang, hindi ang buong imbentaryo.',
     settings_backupTitle: 'Paalala: mag-backup',
@@ -1338,6 +1367,9 @@ export const STRINGS = {
       'Manatiling online — awtomatik ang sync. I-pull down sa Customers para subukan ulit.',
     offline_payNeedsItems: 'Magdagdag muna ng utang item bago magtala ng bayad.',
     toast_editsQueued: 'Na-save sa device. Magse-sync kapag may internet.',
+    toast_offlineLost:
+      'Walang internet koneksyon. Ia-upload ang mga pagbabago kapag may bumalik na internet.',
+    toast_offlineRestored: 'Bumalik online. Awtomatikong magpapatuloy ang sync.',
 
     card_lastTx: 'Huling transaksyon:',
     card_noneYet: 'wala pa',

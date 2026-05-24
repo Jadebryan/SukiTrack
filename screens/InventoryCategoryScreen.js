@@ -10,7 +10,7 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Button, Chip, Dialog, IconButton, Portal, Text, TextInput, useTheme } from 'react-native-paper';
+import { Button, Chip, Dialog, FAB, IconButton, Portal, Text, TextInput, useTheme } from 'react-native-paper';
 import { AppConfirmDialog } from '@/components/AppConfirmDialog';
 import { EmptyState } from '@/components/EmptyState';
 import { InventoryCategoryListHeader } from '@/components/inventory/InventoryCategoryListHeader';
@@ -27,9 +27,10 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useLocale } from '@/contexts/LocaleContext';
 import { useToast } from '@/contexts/ToastContext';
 import { useInventoryShopData } from '@/hooks/useShopInventory';
+import { useSaveOperation } from '@/hooks/useSaveOperation';
 import { isOnline } from '@/services/networkStatus';
 import * as pinService from '@/services/pinService';
-import { updateInventoryItem } from '@/services/inventoryService';
+import { updateInventoryItem, deleteInventoryItem, createInventoryItem } from '@/services/inventoryService';
 import { itemMatchesCategorySlug, slugToCategory } from '@/utils/categoryRoute';
 import { safeRouterBack } from '@/utils/safeRouterBack';
 
@@ -64,11 +65,14 @@ export function InventoryCategoryScreen() {
   const [bulkUncatPinOpen, setBulkUncatPinOpen] = useState(false);
   const [bulkUncatBusy, setBulkUncatBusy] = useState(false);
   const [bulkMoveBusy, setBulkMoveBusy] = useState(false);
+  const [bulkDeleteConfirmOpen, setBulkDeleteConfirmOpen] = useState(false);
+  const [bulkDeleteBusy, setBulkDeleteBusy] = useState(false);
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState([]);
   const [moveDialogOpen, setMoveDialogOpen] = useState(false);
   const [moveCategory, setMoveCategory] = useState('');
   const pendingBulkSnapshotRef = useRef([]);
+  const { save: runSave } = useSaveOperation();
 
   const slug = useMemo(() => {
     const raw = slugParam;
@@ -85,6 +89,34 @@ export function InventoryCategoryScreen() {
 
   const rows = useMemo(() => inventory || [], [inventory]);
   const nq = useMemo(() => normalize(deferredQ), [deferredQ]);
+
+  const categorySuggestions = useMemo(() => {
+    const seen = new Map();
+    const currentKey = normalize(categoryStored);
+    rows.forEach((item) => {
+      const category = String(item.category || '').trim();
+      const key = normalize(category);
+      if (!category || !key || key === currentKey || seen.has(key)) return;
+      seen.set(key, category);
+    });
+    return [...seen.values()].sort((a, b) =>
+      String(a || '').localeCompare(String(b || ''), 'en', {
+        sensitivity: 'base',
+      })
+    );
+  }, [rows, categoryStored]);
+
+  const filteredMoveCategorySuggestions = useMemo(() => {
+    const query = normalize(moveCategory);
+    const presetLabels = new Set(
+      INVENTORY_CATEGORY_PRESET_KEYS.map((key) => normalize(t(key)))
+    );
+    return categorySuggestions.filter(
+      (category) =>
+        !presetLabels.has(normalize(category)) &&
+        (!query || normalize(category).includes(query))
+    );
+  }, [categorySuggestions, moveCategory, t]);
 
   const filtered = useMemo(() => {
     const list = rows.filter((it) => itemMatchesCategorySlug(it, slug, t));
@@ -119,135 +151,229 @@ export function InventoryCategoryScreen() {
     async (snapshot) => {
       if (!user?.ownerId || !snapshot?.length) return;
       setBulkUncatBusy(true);
-      const doneIds = [];
       try {
-        for (const p of snapshot) {
-          await updateInventoryItem(p.id, {
-            name: p.name,
-            category: '',
-            unitPrice: p.unitPrice,
-          });
-          doneIds.push(p.id);
-        }
-        await refresh();
-        const online = await isOnline();
-        showToast({
-          type: online ? 'success' : 'warning',
-          message: online
-            ? t('inv_bulkUncatToast', { count: snapshot.length })
-            : t('toast_editsQueued'),
-          durationMs: 12_000,
-          actionLabel: t('common_undo'),
-          onAction: async () => {
+        await runSave({
+          label: t('inv_bulkUncat'),
+          toastErrorMessage: t('common_error'),
+          retryLabel: t('common_retry'),
+          task: async () => {
+            const doneIds = [];
             try {
-              for (const row of snapshot) {
-                await updateInventoryItem(row.id, {
-                  name: row.name,
-                  category: row.category,
-                  unitPrice: row.unitPrice,
+              for (const p of snapshot) {
+                await updateInventoryItem(p.id, {
+                  name: p.name,
+                  category: '',
+                  unitPrice: p.unitPrice,
                 });
+                doneIds.push(p.id);
               }
               await refresh();
-              showToast({ type: 'success', message: t('inv_bulkUncatUndoDone') });
-            } catch {
-              showToast({ type: 'error', message: t('inv_bulkUncatUndoFail') });
+            } catch (error) {
+              for (const id of [...doneIds].reverse()) {
+                const orig = snapshot.find((x) => x.id === id);
+                if (!orig) continue;
+                try {
+                  await updateInventoryItem(id, {
+                    name: orig.name,
+                    category: orig.category,
+                    unitPrice: orig.unitPrice,
+                  });
+                } catch {
+                  /* best-effort rollback */
+                }
+              }
+              throw error;
             }
           },
-        });
-      } catch {
-        for (const id of [...doneIds].reverse()) {
-          const orig = snapshot.find((x) => x.id === id);
-          if (!orig) continue;
-          try {
-            await updateInventoryItem(id, {
-              name: orig.name,
-              category: orig.category,
-              unitPrice: orig.unitPrice,
+          onSuccess: async () => {
+            const online = await isOnline();
+            showToast({
+              type: online ? 'success' : 'warning',
+              message: online
+                ? t('inv_bulkUncatToast', { count: snapshot.length })
+                : t('toast_editsQueued'),
+              durationMs: 12_000,
+              actionLabel: t('common_undo'),
+              onAction: async () => {
+                try {
+                  for (const row of snapshot) {
+                    await updateInventoryItem(row.id, {
+                      name: row.name,
+                      category: row.category,
+                      unitPrice: row.unitPrice,
+                    });
+                  }
+                  await refresh();
+                  showToast({ type: 'success', message: t('inv_bulkUncatUndoDone') });
+                } catch {
+                  showToast({ type: 'error', message: t('inv_bulkUncatUndoFail') });
+                }
+              },
             });
-          } catch {
-            /* best-effort rollback */
-          }
-        }
-        showToast({ type: 'error', message: t('common_error') });
+          },
+        });
       } finally {
         setBulkUncatBusy(false);
         pendingBulkSnapshotRef.current = [];
         resetSelection();
       }
     },
-    [user?.ownerId, t, showToast, refresh, resetSelection]
+    [user?.ownerId, t, showToast, refresh, resetSelection, runSave]
   );
 
   const runBulkMove = useCallback(
     async (snapshot, targetCategory) => {
       if (!user?.ownerId || !snapshot?.length || !targetCategory?.trim()) return;
       setBulkMoveBusy(true);
-      const doneIds = [];
       try {
         const categoryValue = targetCategory.trim().slice(0, 80);
-        for (const p of snapshot) {
-          await updateInventoryItem(p.id, {
-            name: p.name,
-            category: categoryValue,
-            unitPrice: p.unitPrice,
-          });
-          doneIds.push(p.id);
-        }
-        await refresh();
-        const online = await isOnline();
-        showToast({
-          type: online ? 'success' : 'warning',
-          message: online
-            ? t('inv_bulkMoveToast', {
-                count: snapshot.length,
-                category: categoryValue,
-              })
-            : t('toast_editsQueued'),
-          durationMs: 12_000,
-          actionLabel: t('common_undo'),
-          onAction: async () => {
+        await runSave({
+          label: t('inv_bulkMove'),
+          toastErrorMessage: t('common_error'),
+          retryLabel: t('common_retry'),
+          task: async () => {
+            const doneIds = [];
             try {
-              for (const row of snapshot) {
-                await updateInventoryItem(row.id, {
-                  name: row.name,
-                  category: row.category,
-                  unitPrice: row.unitPrice,
+              for (const p of snapshot) {
+                await updateInventoryItem(p.id, {
+                  name: p.name,
+                  category: categoryValue,
+                  unitPrice: p.unitPrice,
                 });
+                doneIds.push(p.id);
               }
               await refresh();
-              showToast({
-                type: 'success',
-                message: t('inv_bulkMoveUndoDone', {
-                  category: categoryValue,
-                }),
-              });
-            } catch {
-              showToast({ type: 'error', message: t('inv_bulkMoveUndoFail') });
+            } catch (error) {
+              for (const id of [...doneIds].reverse()) {
+                const orig = snapshot.find((x) => x.id === id);
+                if (!orig) continue;
+                try {
+                  await updateInventoryItem(id, {
+                    name: orig.name,
+                    category: orig.category,
+                    unitPrice: orig.unitPrice,
+                  });
+                } catch {
+                  /* best-effort rollback */
+                }
+              }
+              throw error;
             }
           },
-        });
-      } catch {
-        for (const id of [...doneIds].reverse()) {
-          const orig = snapshot.find((x) => x.id === id);
-          if (!orig) continue;
-          try {
-            await updateInventoryItem(id, {
-              name: orig.name,
-              category: orig.category,
-              unitPrice: orig.unitPrice,
+          onSuccess: async () => {
+            const online = await isOnline();
+            showToast({
+              type: online ? 'success' : 'warning',
+              message: online
+                ? t('inv_bulkMoveToast', {
+                    count: snapshot.length,
+                    category: categoryValue,
+                  })
+                : t('toast_editsQueued'),
+              durationMs: 12_000,
+              actionLabel: t('common_undo'),
+              onAction: async () => {
+                try {
+                  for (const row of snapshot) {
+                    await updateInventoryItem(row.id, {
+                      name: row.name,
+                      category: row.category,
+                      unitPrice: row.unitPrice,
+                    });
+                  }
+                  await refresh();
+                  showToast({
+                    type: 'success',
+                    message: t('inv_bulkMoveUndoDone', {
+                      category: categoryValue,
+                    }),
+                  });
+                } catch {
+                  showToast({ type: 'error', message: t('inv_bulkMoveUndoFail') });
+                }
+              },
             });
-          } catch {
-            /* best-effort rollback */
-          }
-        }
-        showToast({ type: 'error', message: t('common_error') });
+          },
+        });
       } finally {
         setBulkMoveBusy(false);
         pendingBulkSnapshotRef.current = [];
         resetSelection();
       }
     },
-    [user?.ownerId, t, showToast, refresh, resetSelection]
+    [user?.ownerId, t, showToast, refresh, resetSelection, runSave]
+  );
+
+  const runBulkDelete = useCallback(
+    async (snapshot) => {
+      if (!user?.ownerId || !snapshot?.length) return;
+      setBulkDeleteBusy(true);
+      try {
+        await runSave({
+          label: t('inv_bulkDelete'),
+          toastErrorMessage: t('common_error'),
+          retryLabel: t('common_retry'),
+          task: async () => {
+            const doneIds = [];
+            try {
+              for (const p of snapshot) {
+                await deleteInventoryItem(p.id);
+                doneIds.push(p.id);
+              }
+              try {
+                await refresh();
+              } catch {
+                /* ignore refresh errors */
+              }
+            } catch (error) {
+              for (const id of [...doneIds].reverse()) {
+                const orig = snapshot.find((x) => x.id === id);
+                if (!orig) continue;
+                try {
+                  await createInventoryItem({
+                    name: orig.name,
+                    category: orig.category,
+                    unitPrice: orig.unitPrice,
+                  });
+                } catch {
+                  /* best-effort rollback */
+                }
+              }
+              throw error;
+            }
+          },
+          onSuccess: async () => {
+            const online = await isOnline();
+            showToast({
+              type: online ? 'success' : 'warning',
+              message: t('inv_bulkDeleteToast', { count: snapshot.length }),
+              durationMs: 12_000,
+              actionLabel: t('common_undo'),
+              onAction: async () => {
+                try {
+                  for (const row of snapshot) {
+                    await createInventoryItem({
+                      name: row.name,
+                      category: row.category,
+                      unitPrice: row.unitPrice,
+                    });
+                  }
+                  await refresh();
+                  showToast({ type: 'success', message: t('inv_bulkDeleteUndoDone') });
+                } catch {
+                  showToast({ type: 'error', message: t('inv_bulkDeleteUndoFail') });
+                }
+              },
+            });
+          },
+        });
+      } finally {
+        setBulkDeleteBusy(false);
+        pendingBulkSnapshotRef.current = [];
+        resetSelection();
+      }
+    },
+    [user?.ownerId, t, showToast, refresh, resetSelection, runSave]
   );
 
   const openBulkUncatFlow = useCallback(() => {
@@ -290,7 +416,20 @@ export function InventoryCategoryScreen() {
     setMoveDialogOpen(true);
   }, [rows, selectedIds]);
 
+  const openBulkDeleteSelectedFlow = useCallback(() => {
+    pendingBulkSnapshotRef.current = rows
+      .filter((it) => selectedIds.includes(it.id))
+      .map((it) => ({
+        id: it.id,
+        name: it.name,
+        category: String(it.category || '').trim(),
+        unitPrice: it.unitPrice,
+      }));
+    setBulkDeleteConfirmOpen(true);
+  }, [rows, selectedIds]);
+
   const bulkActionBusy = bulkUncatBusy || bulkMoveBusy;
+  const anyBulkBusy = bulkActionBusy || bulkDeleteBusy;
   const fabBottom = getTabBarOuterHeight(insets.bottom) + 12;
   const showUncategorizeAll =
     Boolean(user?.ownerId) && Boolean(categoryStored.trim()) && filtered.length > 0;
@@ -341,6 +480,15 @@ export function InventoryCategoryScreen() {
       openBulkSelectMode();
     }
   }, [selectionMode, resetSelection, openBulkSelectMode]);
+
+  const allSelected = filtered.length > 0 && selectedIds.length === filtered.length;
+  const handleSelectAll = useCallback(() => {
+    if (allSelected) {
+      setSelectedIds([]);
+      return;
+    }
+    setSelectedIds(filtered.map((item) => item.id));
+  }, [allSelected, filtered]);
 
   const listEmpty =
     loading && rows.length === 0 ? (
@@ -408,9 +556,12 @@ export function InventoryCategoryScreen() {
         selectionMode={selectionMode}
         selectedCount={selectedCount}
         showSelectButton={showSelectButton}
+        showSelectAll={selectionMode && filtered.length > 0}
+        allSelected={allSelected}
         onToggleSelectMode={handleToggleSelectMode}
+        onSelectAll={handleSelectAll}
         onAddProduct={openCreate}
-        showAddButton={!selectionMode}
+        showAddButton={false}
       />
     ),
     [
@@ -469,29 +620,55 @@ export function InventoryCategoryScreen() {
               },
             ]}
           >
-            <Text style={[styles.selectionLabel, { color: colors.text }]}>
-              {t('inv_bulkSelectedCount', { count: selectedCount })}
-            </Text>
-            <View style={styles.selectionActions}>
-              <Button
-                mode="outlined"
-                compact
+            <View style={styles.bulkLeft}>
+              <View style={[styles.selectionBadge, { backgroundColor: colors.green600 }] }>
+                <Text style={styles.selectionBadgeText}>{selectedCount}</Text>
+              </View>
+              <Text style={[styles.selectionLabelCompact, { color: colors.text }]}> 
+                {t('inv_bulkSelectedCount', { count: selectedCount })}
+              </Text>
+            </View>
+
+            <View style={styles.actionGroup}>
+              <IconButton
+                icon="arrow-right-bold-box"
+                size={18}
                 onPress={openBulkMoveFlow}
-                disabled={!selectedCount || bulkActionBusy}
-              >
-                {t('inv_bulkMove')}
-              </Button>
-              <Button
-                mode="contained"
-                compact
+                disabled={!selectedCount || anyBulkBusy}
+                accessibilityLabel={t('inv_bulkMove')}
+                style={[
+                  styles.actionBtn,
+                  { backgroundColor: colors.green50, borderColor: colors.green100 },
+                ]}
+                color={colors.green700}
+              />
+
+              <IconButton
+                icon="tag-remove"
+                size={18}
                 onPress={openBulkUncatSelectedFlow}
-                disabled={!selectedCount || bulkActionBusy}
-              >
-                {t('inv_bulkUncatSelected')}
-              </Button>
+                disabled={!selectedCount || anyBulkBusy}
+                accessibilityLabel={t('inv_bulkUncatSelected')}
+                style={[
+                  styles.actionBtn,
+                  { backgroundColor: colors.green50, borderColor: colors.green100 },
+                ]}
+                color={colors.green700}
+              />
+
+              <IconButton
+                icon="trash-can"
+                size={18}
+                onPress={openBulkDeleteSelectedFlow}
+                disabled={!selectedCount || anyBulkBusy}
+                accessibilityLabel={t('common_delete')}
+                style={[styles.actionBtn, styles.actionBtnDanger]}
+                color="#FFFFFF"
+              />
+
               <IconButton
                 icon="close"
-                size={24}
+                size={18}
                 onPress={resetSelection}
                 disabled={bulkActionBusy}
                 accessibilityLabel={t('common_cancel')}
@@ -512,6 +689,19 @@ export function InventoryCategoryScreen() {
           forcedCategoryWhenLocked={categoryStored}
         />
       </KeyboardAvoidingView>
+
+      <FAB
+        icon="package-variant"
+        onPress={openCreate}
+        style={[
+          styles.fab,
+          {
+            bottom: selectionMode ? fabBottom + 120 : fabBottom,
+          },
+        ]}
+        accessible
+        accessibilityLabel={t('inv_fabAddToCategory')}
+      />
 
       <Portal>
         <Dialog
@@ -546,6 +736,16 @@ export function InventoryCategoryScreen() {
                   onPress={() => setMoveCategory(t(key))}
                 >
                   {t(key)}
+                </Chip>
+              ))}
+              {filteredMoveCategorySuggestions.map((category) => (
+                <Chip
+                  key={`suggestion-${category}`}
+                  compact
+                  style={styles.modalPresetChip}
+                  onPress={() => setMoveCategory(category)}
+                >
+                  {category}
                 </Chip>
               ))}
             </View>
@@ -602,6 +802,34 @@ export function InventoryCategoryScreen() {
         }}
       />
 
+      <AppConfirmDialog
+        visible={bulkDeleteConfirmOpen}
+        title={t('inv_bulkDeleteTitle')}
+        message={t('inv_bulkDeleteMsg', {
+          count: bulkCount,
+          category: bulkCategoryLabel,
+        })}
+        confirmText={t('inv_bulkDeleteConfirm')}
+        cancelText={t('common_cancel')}
+        destructive
+        confirmDisabled={anyBulkBusy}
+        confirmLoading={bulkDeleteBusy}
+        onCancel={() => {
+          if (!bulkDeleteBusy) {
+            setBulkDeleteConfirmOpen(false);
+            pendingBulkSnapshotRef.current = [];
+          }
+        }}
+        onConfirm={() => {
+          setBulkDeleteConfirmOpen(false);
+          void (async () => {
+            const snap = pendingBulkSnapshotRef.current;
+            if (!snap?.length || !user?.ownerId) return;
+            await runBulkDelete(snap);
+          })();
+        }}
+      />
+
       <VerifyPinModal
         visible={bulkUncatPinOpen}
         onDismiss={() => {
@@ -628,21 +856,31 @@ const styles = StyleSheet.create({
   listFlex: { flex: 1 },
   content: { flexGrow: 1 },
   emptyWrap: { flex: 1, justifyContent: 'center', minHeight: 280 },
+  fab: {
+    position: 'absolute',
+    margin: 16,
+    right: 0,
+  },
   bulkSelectionBar: {
     position: 'absolute',
     left: 16,
     right: 16,
     borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 18,
-    padding: 12,
-  },
-  selectionLabel: { fontFamily: font.extraBold, marginBottom: 8 },
-  selectionActions: {
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    minHeight: 48,
   },
+  bulkLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  selectionBadge: { width: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
+  selectionBadgeText: { color: '#FFFFFF', fontFamily: font.extraBold, fontSize: 12 },
+  selectionLabelCompact: { fontFamily: font.medium, fontSize: 13 },
+  actionGroup: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  actionBtn: { width: 40, height: 36, borderRadius: 8, alignItems: 'center', justifyContent: 'center', padding: 0, borderWidth: StyleSheet.hairlineWidth },
+  actionBtnDanger: { backgroundColor: '#C62828', borderColor: '#C62828' },
   dialog: { alignSelf: 'center', width: '92%', maxWidth: 420 },
   dialogActions: { paddingHorizontal: 16 },
   moveDialogMsg: { lineHeight: 20, marginBottom: 12 },

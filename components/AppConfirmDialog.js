@@ -85,7 +85,8 @@ export function AppConfirmDialog({
                 <Button
                   mode="contained"
                   onPress={onConfirm}
-                  style={[styles.confirmBtn, { backgroundColor: confirmColor }]}
+                  buttonColor={confirmColor}
+                  style={styles.confirmBtn}
                   disabled={isBusy}
                   loading={confirmLoading}
                 >
@@ -144,7 +145,8 @@ export function AppConfirmDialog({
             <Button
               mode="contained"
               onPress={onConfirm}
-              style={[styles.confirmBtn, { backgroundColor: confirmColor }]}
+              buttonColor={confirmColor}
+              style={styles.confirmBtn}
               disabled={isBusy}
               loading={confirmLoading}
             >
@@ -161,23 +163,23 @@ const styles = StyleSheet.create({
   dialog: {
     alignSelf: 'center',
     width: '92%',
-    maxWidth: 420,
-    borderRadius: 18,
+    maxWidth: 460,
+    borderRadius: 20,
     borderWidth: 1,
   },
   head: {
     /** Cancel RN Paper Dialog MD3 `marginTop: 24` injected on first child */
     marginTop: 0,
-    paddingTop: 10,
-    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingHorizontal: 18,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 14,
   },
   iconBubble: {
-    width: 38,
-    height: 38,
-    borderRadius: 13,
+    width: 42,
+    height: 42,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -188,18 +190,18 @@ const styles = StyleSheet.create({
     padding: 0,
     fontFamily: font.extraBold,
   },
-  content: { paddingTop: 8 },
-  msg: { lineHeight: 20, opacity: 0.95, marginTop: 0 },
-  actions: { paddingHorizontal: 16, paddingBottom: 14 },
-  btnRow: { flexDirection: 'row', gap: 10, width: '100%' },
-  cancelBtn: { flex: 1, borderRadius: 14 },
-  confirmBtn: { flex: 1, borderRadius: 14 },
+  content: { paddingTop: 10 },
+  msg: { lineHeight: 22, opacity: 0.95, marginTop: 0 },
+  actions: { paddingHorizontal: 18, paddingBottom: 16 },
+  btnRow: { flexDirection: 'row', gap: 12, width: '100%' },
+  cancelBtn: { flex: 1, borderRadius: 16 },
+  confirmBtn: { flex: 1, borderRadius: 16 },
   nativeModalRoot: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
-    backgroundColor: 'rgba(0, 0, 0, 0.45)',
+    backgroundColor: 'rgba(0, 0, 0, 0.42)',
   },
   nativeModalContainer: {
     width: '100%',

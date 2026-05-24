@@ -439,6 +439,7 @@ export function InventoryHubScreen() {
       return;
     }
     setSavingCat(true);
+    let added = false;
     try {
       const r = await addExtraInventoryCategory(user.ownerId, name);
       if (!r.ok) {
@@ -449,8 +450,8 @@ export function InventoryHubScreen() {
         });
         return;
       }
-      const next = await getExtraInventoryCategories(user.ownerId);
-      setExtraCategories(next);
+      added = true;
+      setExtraCategories((prev) => [...prev, name]);
       forgetNetworkStickerMissForLabel(name);
       void suggestAndPersistCategorySticker(user.ownerId, name).then((res) => {
         if (res?.visual) {
@@ -473,10 +474,13 @@ export function InventoryHubScreen() {
       });
       setNewCatOpen(false);
       setNewCatName('');
+      showToast({ type: 'success', message: t('inv_newCategorySaved') });
       const slug = categoryToSlug(name, t);
       router.push(`/inventory/${encodeURIComponent(slug)}`);
     } catch {
-      showToast({ type: 'error', message: t('common_error') });
+      if (!added) {
+        showToast({ type: 'error', message: t('common_error') });
+      }
     } finally {
       setSavingCat(false);
     }

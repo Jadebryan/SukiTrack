@@ -11,6 +11,8 @@ import {
   Text as RNText,
   View,
 } from 'react-native';
+import Animated from 'react-native-reanimated';
+import { useFadeSlideIn, usePressScale } from '@/utils/animations';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { isApiConfigured } from '@/constants/apiConfig';
 import { font } from '@/constants/theme';
@@ -82,13 +84,18 @@ export function WelcomeScreen() {
     },
   ];
 
+  const screenStyle = useFadeSlideIn();
+
   const { cardPaddingBottom: cardPadBottom } = authStackBottomPads(
     insets.bottom,
     0,
   );
 
+  const { animatedStyle: btnPrimaryStyle, onPressIn: onPrimaryIn, onPressOut: onPrimaryOut } = usePressScale(0.96);
+  const { animatedStyle: btnSecondaryStyle, onPressIn: onSecondaryIn, onPressOut: onSecondaryOut } = usePressScale(0.96);
+
   return (
-    <View style={styles.root}>
+    <Animated.View style={[styles.root, screenStyle]}>
       <StatusBar style="light" />
       <View pointerEvents="none" style={styles.blobTop} />
       <View pointerEvents="none" style={styles.blobBottom} />
@@ -170,47 +177,43 @@ export function WelcomeScreen() {
             </View>
           ) : null}
 
-          <Pressable
-            onPress={() => router.push('/register')}
-            style={({ pressed }) => [
-              styles.btnPrimary,
-              {
-                opacity: pressed ? 0.92 : 1,
-                transform: [{ scale: pressed ? 0.96 : 1 }],
-              },
-            ]}
-            accessibilityRole="button"
-            accessibilityLabel={t('welcome_createAccount')}
-          >
-            <MaterialCommunityIcons
-              name="account-plus"
-              size={22}
-              color={C.white}
-            />
-            <RNText style={styles.btnPrimaryText}>
-              {t('welcome_createAccount')}
-            </RNText>
-          </Pressable>
+          <Animated.View style={btnPrimaryStyle}>
+            <Pressable
+              onPress={() => router.push('/register')}
+              onPressIn={onPrimaryIn}
+              onPressOut={onPrimaryOut}
+              style={styles.btnPrimary}
+              accessibilityRole="button"
+              accessibilityLabel={t('welcome_createAccount')}
+            >
+              <MaterialCommunityIcons
+                name="account-plus"
+                size={22}
+                color={C.white}
+              />
+              <RNText style={styles.btnPrimaryText}>
+                {t('welcome_createAccount')}
+              </RNText>
+            </Pressable>
+          </Animated.View>
 
-          <Pressable
-            onPress={() => router.push('/sign-in')}
-            style={({ pressed }) => [
-              styles.btnSecondary,
-              {
-                opacity: pressed ? 0.9 : 1,
-                transform: [{ scale: pressed ? 0.96 : 1 }],
-              },
-            ]}
-            accessibilityRole="button"
-            accessibilityLabel={t('welcome_haveAccount')}
-          >
-            <RNText style={styles.btnSecondaryText}>
-              {t('welcome_haveAccount')}
-            </RNText>
-          </Pressable>
+          <Animated.View style={btnSecondaryStyle}>
+            <Pressable
+              onPress={() => router.push('/sign-in')}
+              onPressIn={onSecondaryIn}
+              onPressOut={onSecondaryOut}
+              style={styles.btnSecondary}
+              accessibilityRole="button"
+              accessibilityLabel={t('welcome_haveAccount')}
+            >
+              <RNText style={styles.btnSecondaryText}>
+                {t('welcome_haveAccount')}
+              </RNText>
+            </Pressable>
+          </Animated.View>
         </View>
       </ScrollView>
-    </View>
+    </Animated.View>
   );
 }
 

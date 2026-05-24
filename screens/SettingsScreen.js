@@ -6,6 +6,7 @@ import React, { useCallback, useMemo, useState } from 'react';
 import { Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
+  ActivityIndicator,
   Button,
   Dialog,
   Portal,
@@ -92,6 +93,7 @@ export function SettingsScreen() {
   const { customers } = useCustomers(user?.ownerId);
   const { pages, inventory } = useAllPages(user?.ownerId);
   const [exporting, setExporting] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const [backupOpen, setBackupOpen] = useState(false);
   const [lastExportIso, setLastExportIso] = useState(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -153,6 +155,24 @@ export function SettingsScreen() {
       return false;
     } finally {
       setExporting(false);
+    }
+  };
+
+  const onSyncData = async () => {
+    if (syncing) return;
+    setSyncing(true);
+    try {
+      const result = await refresh();
+      if (result?.ok) {
+        showToast({ type: 'success', message: t('toast_syncDone') });
+      } else {
+        showToast({
+          type: 'error',
+          message: result?.error?.message || t('common_error'),
+        });
+      }
+    } finally {
+      setSyncing(false);
     }
   };
 
@@ -356,6 +376,22 @@ export function SettingsScreen() {
               }}
               right={
                 <MaterialCommunityIcons name="chevron-right" size={18} color="#9ab09e" />
+              }
+            />
+            <View style={[styles.div, { backgroundColor: C.border }]} />
+            <SettingsRow
+              icon="sync"
+              iconBg={C.greenLight}
+              iconColor={C.green}
+              title={t('settings_syncTitle')}
+              subtitle={t('settings_syncDesc')}
+              onPress={onSyncData}
+              right={
+                syncing ? (
+                  <ActivityIndicator animating size={18} color={C.green} />
+                ) : (
+                  <MaterialCommunityIcons name="chevron-right" size={18} color="#9ab09e" />
+                )
               }
             />
             <View style={[styles.div, { backgroundColor: C.border }]} />

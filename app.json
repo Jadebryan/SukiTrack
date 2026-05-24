@@ -1,13 +1,12 @@
 {
   "expo": {
     "name": "SukiTrack",
-    "slug": "sukitrack",
+    "slug": "sukitack",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/sukitrack-app-icon.png",
     "scheme": "sukitrack",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
     "splash": {
       "image": "./assets/images/sukitrack-app-icon.png",
       "resizeMode": "contain",
@@ -24,7 +23,6 @@
         "foregroundImage": "./assets/images/sukitrack-app-icon.png",
         "backgroundColor": "#f4f1e8"
       },
-      "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
       "permissions": [
         "android.permission.RECORD_AUDIO"
@@ -61,8 +59,9 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "2037367f-0c7d-4aae-ac1f-016b0daa430d"
+        "projectId": "518b10d3-e552-4e44-8355-17c4b798061a"
       }
-    }
+    },
+    "owner": "jeddbrynn"
   }
 }

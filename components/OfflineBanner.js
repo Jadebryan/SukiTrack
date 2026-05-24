@@ -23,8 +23,16 @@ export function OfflineBanner({
   return (
     <Banner
       visible
-      icon={isOffline ? 'cloud-off-outline' : 'cloud-sync-outline'}
+      icon={isOffline ? 'wifi-off' : 'cloud-sync-outline'}
       actions={[{ label: t('common_ok'), onPress: onDismiss }]}
+      style={{
+        backgroundColor: '#FAC775',
+        borderBottomWidth: 1,
+        borderBottomColor: 'rgba(0,0,0,0.10)',
+      }}
+      contentStyle={{
+        paddingVertical: 12,
+      }}
     >
       {headline}
       {'\n\n'}

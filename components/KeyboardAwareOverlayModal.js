@@ -128,5 +128,11 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     width: '100%',
     maxWidth: overlaySheet.maxWidth,
+    borderRadius: overlaySheet.borderRadius,
+    shadowColor: '#000',
+    shadowOpacity: 0.08,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: overlaySheet.elevation,
   },
 });

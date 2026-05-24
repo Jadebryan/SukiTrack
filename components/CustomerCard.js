@@ -1,5 +1,6 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { font } from '@/constants/theme';
 import { homeAvatarColor } from '@/constants/homePalette';
 import { useLocale } from '@/contexts/LocaleContext';
@@ -12,7 +13,7 @@ import { formatShortDate } from '@/utils/date';
  * @param {() => void} props.onPress
  * @param {ReturnType<import('@/constants/homePalette').getHomePalette>} [props.colors]
  */
-export function CustomerCard({ customer, onPress, colors }) {
+export function CustomerCard({ customer, onPress, colors, selectionMode, selected, onToggleSelect, onLongPress }) {
   const { t } = useLocale();
   const balance = Number(customer.balance) || 0;
   const isPaidUp = balance <= 0;
@@ -21,7 +22,7 @@ export function CustomerCard({ customer, onPress, colors }) {
   const hasActivity = Boolean(customer.lastTransactionAt);
 
   const cardBg = colors?.cardBg ?? '#FFFFFF';
-  const borderColor = colors?.border ?? 'rgba(0,0,0,0.10)';
+  const borderColor = selected ? (colors?.green600 ?? '#0F6E56') : (colors?.border ?? 'rgba(0,0,0,0.10)');
   const nameColor = colors?.text ?? '#1D1D1D';
   const metaColor = colors?.textFaint ?? '#888780';
   const owesColor = colors?.red800 ?? '#A32D2D';
@@ -30,9 +31,23 @@ export function CustomerCard({ customer, onPress, colors }) {
   return (
     <Pressable
       onPress={onPress}
+      onLongPress={onLongPress}
       style={({ pressed }) => [styles.press, pressed && styles.pressed]}
+      accessibilityState={selectionMode ? { selected: !!selected } : {}}
     >
-      <View style={[styles.card, { backgroundColor: cardBg, borderColor }]}>
+      <View style={[styles.card, { backgroundColor: cardBg, borderColor, borderWidth: selected ? 2 : StyleSheet.hairlineWidth }]}>
+        {selectionMode ? (
+          <Pressable onPress={onToggleSelect} style={styles.checkboxWrap} accessibilityRole="checkbox" accessibilityState={{ checked: !!selected }}>
+            <View style={[styles.checkbox, selected ? { backgroundColor: '#0F6E56', borderColor: '#0F6E56' } : { borderColor }]}>
+              {selected ? (
+                <MaterialCommunityIcons name="checkbox-marked" size={16} color="#FFFFFF" />
+              ) : (
+                <MaterialCommunityIcons name="checkbox-blank-outline" size={16} color={borderColor} />
+              )}
+            </View>
+          </Pressable>
+        ) : null}
+
         <View style={[styles.avatar, { backgroundColor: av.bg }]}>
           <Text style={[styles.avatarText, { color: av.text }]}>{initial}</Text>
         </View>
@@ -116,5 +131,19 @@ const styles = StyleSheet.create({
   tag: {
     fontFamily: font.medium,
     fontSize: 11,
+  },
+  checkboxWrap: {
+    marginRight: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkbox: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: StyleSheet.hairlineWidth,
+    backgroundColor: 'transparent',
   },
 });

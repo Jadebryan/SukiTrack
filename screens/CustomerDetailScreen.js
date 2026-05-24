@@ -108,6 +108,7 @@ export function CustomerDetailScreen() {
   const { t } = useLocale();
   const { showToast } = useToast();
   const { save, isSaving } = useSaveOperation();
+  const [transactionSubmitting, setTransactionSubmitting] = useState(false);
   const theme = useTheme();
   const { isDark } = useAppTheme();
   const colors = useMemo(() => getCustomerDetailPalette(isDark), [isDark]);
@@ -178,8 +179,9 @@ export function CustomerDetailScreen() {
       return;
     }
     setModalOpen(false);
+    setTransactionSubmitting(true);
 
-    void save({
+    const opPromise = save({
       label: t('common_saving'),
       task: async () => {
         if (payload.type === 'utang') {
@@ -235,6 +237,10 @@ export function CustomerDetailScreen() {
       },
       toastErrorMessage: t('cd_saveErr'),
       retryLabel: t('common_retry'),
+    });
+
+    opPromise.finally(() => {
+      setTransactionSubmitting(false);
     });
   };
 
@@ -494,7 +500,7 @@ export function CustomerDetailScreen() {
         onDismiss={() => setModalOpen(false)}
         initialType={modalType}
         onSubmit={onSubmitTx}
-        submitting={isSaving}
+        submitting={transactionSubmitting}
         inventoryItems={inventory}
         sheetDue={
           modalOpen && modalType === 'payment' && openPage

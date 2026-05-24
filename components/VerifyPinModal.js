@@ -156,8 +156,8 @@ export function VerifyPinModal({
 }
 
 const styles = StyleSheet.create({
-  sheet: { padding: 18, paddingBottom: 16 },
-  head: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, marginBottom: 12 },
+  sheet: { padding: 20, paddingBottom: 18 },
+  head: { flexDirection: 'row', alignItems: 'flex-start', gap: 14, marginBottom: 16 },
   iconBubble: {
     width: 38,
     height: 38,

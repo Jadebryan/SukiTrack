@@ -1,12 +1,30 @@
 import React, { memo, useCallback } from 'react';
 import { CustomerCard } from '@/components/CustomerCard';
 
-function HomeCustomerRow({ customer, onCustomerPress, colors }) {
+function HomeCustomerRow({
+  customer,
+  onCustomerPress,
+  colors,
+  selectionMode,
+  selected,
+  onToggleSelect,
+  onLongPress,
+}) {
   const onPress = useCallback(
     () => onCustomerPress(customer.id),
     [customer.id, onCustomerPress]
   );
-  return <CustomerCard customer={customer} onPress={onPress} colors={colors} />;
+  return (
+    <CustomerCard
+      customer={customer}
+      onPress={onPress}
+      colors={colors}
+      selectionMode={selectionMode}
+      selected={selected}
+      onToggleSelect={() => onToggleSelect && onToggleSelect(customer.id)}
+      onLongPress={() => onLongPress && onLongPress(customer.id)}
+    />
+  );
 }
 
 export default memo(HomeCustomerRow, (prev, next) => {
@@ -18,6 +36,8 @@ export default memo(HomeCustomerRow, (prev, next) => {
     a.name === b.name &&
     a.balance === b.balance &&
     a.lastTransactionAt === b.lastTransactionAt &&
-    prev.colors === next.colors
+    prev.colors === next.colors &&
+    prev.selectionMode === next.selectionMode &&
+    prev.selected === next.selected
   );
 });

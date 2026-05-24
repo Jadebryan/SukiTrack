@@ -1,7 +1,9 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
-import React from 'react';
+import React, { useRef } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import Animated from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useNavBounce } from '@/utils/animations';
 import { CustomersTabBarButton } from '@/components/CustomersTabBarButton';
 import { getTabBarPalette } from '@/constants/tabBarPalette';
 import { font } from '@/constants/theme';
@@ -23,6 +25,11 @@ export function AppTabBar({ state, descriptors, navigation }) {
   const { isDark } = useAppTheme();
   const colors = getTabBarPalette(isDark);
   const padBottom = Math.max(insets.bottom, 10);
+  
+  // Create a bounce animation for each tab
+  const navBounces = useRef(
+    state.routes.map(() => useNavBounce())
+  ).current;
 
   return (
     <View
@@ -44,8 +51,10 @@ export function AppTabBar({ state, descriptors, navigation }) {
         const isFocused = state.index === index;
         const tint = isFocused ? colors.active : colors.inactive;
         const iconName = TAB_ICONS[route.name] || 'circle-outline';
+        const { iconStyle, bounce } = navBounces[index];
 
         const onPress = () => {
+          bounce();
           const event = navigation.emit({
             type: 'tabPress',
             target: route.key,
@@ -79,7 +88,9 @@ export function AppTabBar({ state, descriptors, navigation }) {
             onLongPress={onLongPress}
             style={styles.tab}
           >
-            <MaterialCommunityIcons name={iconName} size={24} color={tint} />
+            <Animated.View style={iconStyle}>
+              <MaterialCommunityIcons name={iconName} size={24} color={tint} />
+            </Animated.View>
             <Text
               style={[
                 styles.label,

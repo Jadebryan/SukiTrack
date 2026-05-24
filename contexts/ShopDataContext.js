@@ -56,11 +56,14 @@ export function ShopDataProvider({ ownerId, children }) {
   }, []);
 
   const refresh = useCallback(async () => {
-    if (!ownerId) return;
+    if (!ownerId) {
+      return { ok: false, error: new Error(t('common_error')) };
+    }
     if (!isApiConfigured()) {
-      setError(new Error(t('err_noApiUrl')));
+      const error = new Error(t('err_noApiUrl'));
+      setError(error);
       setLoading(false);
-      return;
+      return { ok: false, error };
     }
     setError(null);
     try {
@@ -69,16 +72,18 @@ export function ShopDataProvider({ ownerId, children }) {
         setError(syncRes.error);
       }
       const data = await fetchBootstrap();
-      if (!mounted.current) return;
+      if (!mounted.current) return { ok: false, error: new Error(t('common_error')) };
       const prev = await loadShopCache(ownerId);
       const merged = mergeBootstrapWithLocalInventoryImages(data, prev);
       applyPayload(merged);
       await saveShopCache(ownerId, merged);
       setError(null);
+      return { ok: true };
     } catch (e) {
       if (mounted.current) {
         setError(e);
       }
+      return { ok: false, error: e };
     } finally {
       if (mounted.current) {
         setLoading(false);
